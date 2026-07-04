@@ -86,7 +86,7 @@ if not D.API_KEY:
     st.stop()
 
 # ── Filters ────────────────────────────────────────────────────────────────────
-f1, f2, f3, f4, f5 = st.columns([2, 2, 1.5, 1.5, 0.8])
+f1, f2, f3, f4 = st.columns([2, 2.5, 2, 0.8])
 with f1:
     sport_label = st.selectbox("Sport", list(D.SPORTS.keys()), label_visibility="collapsed")
 with f2:
@@ -99,14 +99,13 @@ with f3:
     market_options = ["All Markets"] + list(D.MARKETS.keys())
     sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
 with f4:
-    min_ev_pct = st.slider("Min EV %", 0, 15, 0, label_visibility="collapsed")
-    min_ev = min_ev_pct / 100
-with f5:
     st.write("")
     if st.button("↻ Refresh"):
         st.cache_data.clear()
         st.session_state.expanded = None
         st.rerun()
+
+min_ev = 0  # show all markets regardless of EV
 
 sport_cfg = D.SPORTS[sport_label]
 
@@ -169,7 +168,9 @@ def build_opportunities(fixtures_json):
 
                 if best_bm is None:
                     continue
-                if best_ev < min_ev:
+                # When specific bookmakers selected, show all their markets
+                # When no bookmaker filter, only show positive EV
+                if not sel_bm and best_ev <= 0:
                     continue
                 if sel_market != "All Markets" and market_name != sel_market:
                     continue
@@ -197,16 +198,17 @@ with st.spinner("Scanning markets..."):
 pos_opps = [o for o in opportunities if o["ev"] > 0]
 m1, m2, m3, m4 = st.columns(4)
 with m1: st.metric("Fixtures", len(fixtures))
-with m2: st.metric("EV Opportunities", len(pos_opps))
+with m2: st.metric("Opportunities", len(opportunities))
 with m3: st.metric("Best EV", f"+{pos_opps[0]['ev']*100:.1f}%" if pos_opps else "—")
 with m4: st.metric("Markets Scanned", len(D.MARKETS))
 
 st.write("")
 
 # ── EV Feed ────────────────────────────────────────────────────────────────────
-st.markdown('<div class="section-label">Best Bets Right Now</div>', unsafe_allow_html=True)
+label_text = f"{D.bm_label(sel_bm[0])} Markets" if len(sel_bm) == 1 else ("Selected Bookmakers" if sel_bm else "Best Bets Right Now")
+st.markdown(f'<div class="section-label">{label_text}</div>', unsafe_allow_html=True)
 
-display_opps = pos_opps[:20]
+display_opps = opportunities[:20]
 
 if not display_opps:
     st.markdown(
