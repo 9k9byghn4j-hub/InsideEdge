@@ -1,26 +1,19 @@
 import requests
 
-API_KEY = "REDACTED_API_KEY"
-BASE = "https://v5.oddspapi.io/en"
+# Test if OddsPapi playerIds match SofaScore playerIds
+test_ids = [290927, 1848612, 1564490, 2716582]
 
-r = requests.get(f"{BASE}/fixtures/odds",
-    params={
-        "apiKey": API_KEY,
-        "fixtureId": "id1000001653452519",
-        "bookmakers": "bet365,ladbrokes,coral,paddypower,williamhill",
-    })
-
-odds = r.json().get("odds", {})
-
-# Show full detail of first 5 player props across all markets
-print("=== SAMPLE PLAYER PROP ODDS ===")
-count = 0
-for bm, bm_odds in odds.items():
-    for odd_id, odd in bm_odds.items():
-        if odd.get("playerId", 0) != 0 and count < 20:
-            print(f"oddId: {odd_id}")
-            print(f"  bm={bm} marketId={odd.get('marketId')} outcomeId={odd.get('outcomeId')}")
-            print(f"  playerId={odd.get('playerId')} playerName={odd.get('playerName')}")
-            print(f"  handicap={odd.get('handicap')} price={odd.get('price')} active={odd.get('active')}")
-            print()
-            count += 1
+for pid in test_ids:
+    r = requests.get(
+        f"https://api.sofascore.com/api/v1/player/{pid}",
+        headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Referer": "https://www.sofascore.com"
+        },
+        timeout=5
+    )
+    if r.status_code == 200:
+        name = r.json().get("player", {}).get("name", "?")
+        print(f"{pid} → {name}")
+    else:
+        print(f"{pid} → {r.status_code}")
