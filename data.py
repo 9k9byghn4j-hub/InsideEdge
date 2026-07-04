@@ -125,6 +125,26 @@ MARKETS = {
 # Correct score is special — many outcomes, parse dynamically
 CORRECT_SCORE_MARKET_ID = 10336
 
+# ── Player prop market IDs ─────────────────────────────────────────────────────
+PLAYER_MARKETS = {
+    "Anytime Goalscorer":    {"id": 10730, "over_under": False},
+    "First Goalscorer":      {"id": 10731, "over_under": False},
+    "Last Goalscorer":       {"id": 10732, "over_under": False},
+    "Score 2+ Goals":        {"id": 10733, "over_under": False},
+    "Shots on Target":       {"id": 10753, "over_under": True},
+    "Shots":                 {"id": 10743, "over_under": True},
+    "Fouls Committed":       {"id": 102700, "over_under": True},
+    "Cards":                 {"id": 102732, "over_under": True},
+}
+
+# outcomeId meaning for over/under player markets
+# For shots/fouls etc: lower outcomeId = over, higher = under
+# e.g. 10743=Shots market: 10744=Over 0.5, 10745=Over 1.5, 10746=Over 2.5 etc
+SHOTS_OUTCOME_LINES = {10744: 0.5, 10745: 1.5, 10746: 2.5, 10747: 3.5, 10748: 4.5}
+SOT_OUTCOME_LINES   = {10754: 0.5, 10755: 1.5, 10756: 2.5}
+FOULS_OUTCOME_LINES = {102701: 0.5, 102702: 1.5, 102703: 2.5}
+CARDS_OUTCOME_LINES = {102733: 0.5, 102734: 1.5}
+
 # Tab groupings for the UI
 MARKET_TABS = {
     "Match Result":     ["Full Time Result", "Double Chance", "Draw No Bet"],
@@ -310,3 +330,83 @@ def parse_correct_score(all_odds):
             bf_raw = {k: v / total for k, v in bf_raw.items() if v}
 
     return result, bf_raw
+
+# ── Player name lookup ─────────────────────────────────────────────────────────
+
+def fetch_player_names(player_ids, api_key=None):
+    """Fetch player names for a list of playerIds.
+    Returns {playerId: playerName}"""
+    if not player_ids:
+        return {}
+    key = api_key or API_KEY
+    try:
+        # OddsPapi v5 participants endpoint
+        ids_str = ",".join(str(pid) for pid in player_ids)
+        r = requests.get(
+            f"{BASE}/participants",
+            params={"apiKey": key, "participantIds": ids_str, "sportId": 10},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list):
+                return {p["participantId"]: p["participantName"] for p in data}
+        return {}
+    except Exception:
+        return {}
+
+def parse_player_props(all_odds, market_name):
+    """Parse player prop market from raw odds.
+    Returns list of {playerId, playerName, marketId, outcomeId, line, bm_prices}"""
+    mdef = PLAYER_MARKETS.get(market_name)
+    if not mdef:
+        return [], set()
+
+    market_id   = mdef["id"]
+    is_ou       = mdef["over_under"]
+    props       = {}  # (playerId, outcomeId) -> {bm: price}
+    all_pids    = set()
+
+    for bm, bm_odds in all_odds.items():
+        if bm in EXCLUDED_FROM_EV:
+            continue
+        for odd_id, odd in bm_odds.items():
+            if odd.get("marketId") != market_id:
+                continue
+            if not odd.get("active", True):
+                continue
+            pid   = odd.get("playerId", 0)
+            if pid == 0:
+                continue
+            price = odd.get("price")
+            if not price or price <= 1:
+                continue
+            oid   = odd.get("outcomeId")
+            key   = (pid, oid)
+            if key not in props:
+                props[key] = {"playerId": pid, "outcomeId": oid, "bookmakers": {}}
+            props[key]["bookmakers"][bm] = price
+            all_pids.add(pid)
+
+    # Decode lines for over/under markets
+    line_maps = {
+        10743: SHOTS_OUTCOME_LINES,
+        10753: SOT_OUTCOME_LINES,
+        102700: FOULS_OUTCOME_LINES,
+        102732: CARDS_OUTCOME_LINES,
+    }
+    line_map = line_maps.get(market_id, {})
+
+    results = []
+    for (pid, oid), pdata in props.items():
+        line = line_map.get(oid) if is_ou else None
+        results.append({
+            "playerId":   pid,
+            "playerName": f"Player {pid}",  # filled in after name lookup
+            "marketId":   market_id,
+            "outcomeId":  oid,
+            "line":       line,
+            "bookmakers": pdata["bookmakers"],
+        })
+
+    return results, all_pids

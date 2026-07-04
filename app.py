@@ -96,7 +96,7 @@ with f2:
                              placeholder="All bookmakers",
                              label_visibility="collapsed")
 with f3:
-    market_options = ["All Markets"] + list(D.MARKETS.keys())
+    market_options = ["All Markets"] + list(D.MARKETS.keys()) + list(D.PLAYER_MARKETS.keys())
     sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
 with f4:
     st.write("")
@@ -186,6 +186,75 @@ def build_opportunities(fixtures_json):
                     "true_prob":   true_prob,
                     "ev":          best_ev,
                     "all_prices":  bm_prices,
+                })
+
+    # ── Player props ──────────────────────────────────────────────────────────
+    for fx in fixtures:
+        all_odds = get_all_odds(fx["fixtureId"])
+        if not all_odds:
+            continue
+
+        for market_name in D.PLAYER_MARKETS:
+            if sel_market not in ("All Markets", market_name):
+                continue
+
+            props, all_pids = D.parse_player_props(all_odds, market_name)
+            if not props:
+                continue
+
+            # Batch fetch player names
+            names = D.fetch_player_names(all_pids)
+
+            for prop in props:
+                pid       = prop["playerId"]
+                bm_prices = prop["bookmakers"]
+                if not bm_prices:
+                    continue
+
+                player_name = names.get(pid, f"Player {pid}")
+                line_str    = f" Over {prop['line']}" if prop["line"] else ""
+                outcome     = f"{player_name}{line_str}"
+
+                dedup_key = (fx["fixtureId"], market_name, pid, prop["outcomeId"])
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
+
+                # Find best EV
+                best_ev, best_bm, best_price = -999, None, None
+                for bm, price in bm_prices.items():
+                    if sel_bm and bm not in sel_bm:
+                        continue
+                    # No Betfair benchmark for player props — use Pinnacle as proxy
+                    pinnacle_price = bm_prices.get("pinnacle")
+                    if pinnacle_price:
+                        true_prob = 1 / pinnacle_price
+                        ev = D.calc_ev(true_prob, price)
+                    else:
+                        ev = 0
+                    if ev > best_ev:
+                        best_ev, best_bm, best_price = ev, bm, price
+
+                if best_bm is None:
+                    continue
+                if not sel_bm and best_ev <= 0:
+                    continue
+
+                pinnacle_price = bm_prices.get("pinnacle")
+                true_prob = (1 / pinnacle_price) if pinnacle_price else None
+
+                opps.append({
+                    "fixtureId":   fx["fixtureId"],
+                    "match":       f"{fx['home']} v {fx['away']}",
+                    "start":       fx["start"],
+                    "market":      market_name,
+                    "outcome":     outcome,
+                    "best_bm":     best_bm,
+                    "best_price":  best_price,
+                    "true_prob":   true_prob,
+                    "ev":          best_ev,
+                    "all_prices":  bm_prices,
+                    "is_player":   True,
                 })
 
     return sorted(opps, key=lambda x: x["ev"], reverse=True)
