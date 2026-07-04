@@ -84,7 +84,51 @@ if not D.API_KEY:
     st.stop()
 
 # ── Filters ────────────────────────────────────────────────────────────────────
-f1, f2, f3, f4 = st.columns([2, 2.5, 2, 0.8])
+STICKMAN_HTML = """
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+     padding:3rem;color:#5a5a7a;font-family:'JetBrains Mono',monospace;">
+<style>
+@keyframes kick {
+    0%   { transform: rotate(0deg); }
+    25%  { transform: rotate(-20deg); }
+    50%  { transform: rotate(10deg); }
+    75%  { transform: rotate(-10deg); }
+    100% { transform: rotate(0deg); }
+}
+@keyframes ball {
+    0%   { transform: translateY(0px); }
+    50%  { transform: translateY(-18px); }
+    100% { transform: translateY(0px); }
+}
+.stickman-wrap { position:relative; width:60px; height:100px; }
+.stickman { animation: kick 0.8s ease-in-out infinite; transform-origin: bottom center; }
+.ball { animation: ball 0.8s ease-in-out infinite; position:absolute; bottom:-10px; left:50%; }
+</style>
+<div class="stickman-wrap">
+<svg class="stickman" width="60" height="90" viewBox="0 0 60 90">
+  <!-- head -->
+  <circle cx="30" cy="10" r="8" stroke="#00e5a0" stroke-width="2" fill="none"/>
+  <!-- body -->
+  <line x1="30" y1="18" x2="30" y2="50" stroke="#00e5a0" stroke-width="2"/>
+  <!-- left arm -->
+  <line x1="30" y1="28" x2="10" y2="38" stroke="#00e5a0" stroke-width="2"/>
+  <!-- right arm up -->
+  <line x1="30" y1="28" x2="50" y2="20" stroke="#00e5a0" stroke-width="2"/>
+  <!-- left leg -->
+  <line x1="30" y1="50" x2="15" y2="75" stroke="#00e5a0" stroke-width="2"/>
+  <!-- right leg kicking -->
+  <line x1="30" y1="50" x2="50" y2="60" stroke="#00e5a0" stroke-width="2"/>
+  <line x1="50" y1="60" x2="55" y2="45" stroke="#00e5a0" stroke-width="2"/>
+</svg>
+<svg class="ball" width="12" height="12" viewBox="0 0 12 12">
+  <circle cx="6" cy="6" r="5" stroke="#00e5a0" stroke-width="1.5" fill="none"/>
+</svg>
+</div>
+<div style="margin-top:1.5rem;font-size:0.7rem;letter-spacing:0.15em">LOADING MARKETS...</div>
+</div>
+"""
+
+f1, f2, f3, f4, f5 = st.columns([2, 2, 1.8, 1.5, 0.8])
 with f1:
     sport_label = st.selectbox("Sport", list(D.SPORTS.keys()), label_visibility="collapsed")
 with f2:
@@ -96,6 +140,10 @@ with f3:
     market_options = ["All Markets"] + list(D.MARKETS.keys()) + list(D.PLAYER_MARKETS.keys())
     sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
 with f4:
+    odds_range = st.slider("Odds range", min_value=1.0, max_value=20.0,
+                           value=(1.0, 20.0), step=0.5,
+                           label_visibility="collapsed")
+with f5:
     st.write("")
     if st.button("↻ Refresh"):
         st.cache_data.clear()
@@ -109,8 +157,10 @@ sport_cfg = D.SPORTS[sport_label]
 def get_fixtures(tid):
     return D.fetch_fixtures(tid)
 
-with st.spinner("Loading fixtures..."):
-    fixtures = get_fixtures(sport_cfg["id"])
+fixtures_placeholder = st.empty()
+fixtures_placeholder.markdown(STICKMAN_HTML, unsafe_allow_html=True)
+fixtures = get_fixtures(sport_cfg["id"])
+fixtures_placeholder.empty()
 
 if not fixtures:
     st.markdown('<div class="no-data">No upcoming fixtures found.</div>', unsafe_allow_html=True)
@@ -235,8 +285,10 @@ def build_opportunities(fixtures, sel_bm, sel_market):
 
     return sorted(opps, key=lambda x: x["ev"], reverse=True)
 
-with st.spinner("Scanning markets for value..."):
-    opportunities = build_opportunities(fixtures, set(sel_bm), sel_market)
+opps_placeholder = st.empty()
+opps_placeholder.markdown(STICKMAN_HTML, unsafe_allow_html=True)
+opportunities = build_opportunities(fixtures, set(sel_bm), sel_market)
+opps_placeholder.empty()
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
 pos_opps = [o for o in opportunities if o["ev"] > 0]
@@ -254,7 +306,10 @@ label = (f"{D.bm_label(sel_bm[0])} Markets" if len(sel_bm) == 1
          else "Best Bets Right Now")
 st.markdown(f'<div class="section-label">{label}</div>', unsafe_allow_html=True)
 
-display_opps = opportunities[:20]
+display_opps = [
+    o for o in opportunities
+    if odds_range[0] <= o["best_price"] <= odds_range[1]
+][:20]
 
 if not display_opps:
     st.markdown(
@@ -361,7 +416,9 @@ if query.strip():
             fx = matches[0]
 
         fx_opps = [o for o in opportunities
-                   if o["fixtureId"] == fx["fixtureId"] and o["ev"] > 0]
+                   if o["fixtureId"] == fx["fixtureId"]
+                   and o["ev"] > 0
+                   and odds_range[0] <= o["best_price"] <= odds_range[1]]
 
         if not fx_opps:
             st.markdown('<div class="no-data">No positive EV opportunities for this fixture yet.</div>',
