@@ -71,7 +71,9 @@ if "expanded" not in st.session_state:
     st.session_state.expanded = None
 
 # ── Top bar ────────────────────────────────────────────────────────────────────
-now = datetime.utcnow().strftime("%d %b %Y  %H:%M UTC")
+from datetime import timezone, timedelta
+bst = timezone(timedelta(hours=1))
+now = datetime.now(bst).strftime("%d %b %Y  %H:%M BST")
 st.markdown(f"""
 <div class="topbar">
     <div class="logo">INSIDE<span>EDGE</span></div>
