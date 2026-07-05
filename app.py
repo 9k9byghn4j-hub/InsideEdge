@@ -51,7 +51,7 @@ html, body, [class*="css"] { font-family:'Inter',sans-serif; background:#0a0a0f;
 .bm-odds-best { font-family:'JetBrains Mono',monospace; font-size:0.8rem; font-weight:600; color:#00e5a0; }
 .bm-odds { font-family:'JetBrains Mono',monospace; font-size:0.8rem; font-weight:600; color:#e8e8f0; }
 .bm-ev-pos { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#00e5a0; min-width:3rem; text-align:right; }
-.bm-ev-neg { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#5a5a7a; min-width:3rem; text-align:right; }
+.bm-ev-neg { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#ff4d6d; min-width:3rem; text-align:right; }
 
 .no-data { padding:2rem; text-align:center; color:#5a5a7a; font-family:'JetBrains Mono',monospace; font-size:0.75rem; border:1px dashed #1e1e2e; border-radius:6px; }
 
@@ -179,7 +179,11 @@ with f4:
     odds_range = (float(odds_raw[0]), float("inf") if odds_raw[1] >= 51 else float(odds_raw[1]))
     lo = odds_raw[0]
     hi = "∞" if odds_raw[1] >= 51 else odds_raw[1]
-    st.caption(f"Odds: {lo} → {hi}")
+    st.markdown(
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;color:#5a5a7a;margin-top:0.1rem">' +
+        f'Odds {lo} — {hi}</div>',
+        unsafe_allow_html=True
+    )
 with f5:
     st.write("")
     if st.button("↻ Refresh"):
@@ -207,6 +211,10 @@ if not fixtures:
 @st.cache_data(ttl=60)
 def get_odds(fid):
     return D.fetch_fixture_odds(fid)
+
+@st.cache_data(ttl=60)
+def get_prop_odds(fid):
+    return D.fetch_player_prop_odds(fid)
 
 # ── Build EV opportunities ─────────────────────────────────────────────────────
 def build_opportunities(fixtures, sel_bm, sel_market):
@@ -271,7 +279,8 @@ def build_opportunities(fixtures, sel_bm, sel_market):
             if sel_market not in ("All Markets", market_name):
                 continue
 
-            props, _ = D.parse_player_props(all_odds, market_name)
+            prop_odds = get_prop_odds(fx["fixtureId"])
+            props, _ = D.parse_player_props(prop_odds, market_name)
             if not props:
                 continue
 
@@ -406,14 +415,18 @@ else:
             rows_html = ""
             for bm, price in ranked:
                 ev     = D.calc_ev(true_prob, price)
-                sign   = "+" if ev > 0 else ""
-                ev_cls = "bm-ev-pos" if ev > 0 else "bm-ev-neg"
                 od_cls = "bm-odds-best" if price == best_price else "bm-odds"
+                if ev > 0:
+                    ev_str = f"+{ev*100:.1f}%"
+                    ev_cls = "bm-ev-pos"
+                else:
+                    ev_str = f"{ev*100:.1f}%"
+                    ev_cls = "bm-ev-neg"
                 rows_html += (
                     f'<div class="bm-row">'
                     f'<span class="bm-name">{D.bm_label(bm)}</span>'
                     f'<span class="{od_cls}">{price:.2f}</span>'
-                    f'<span class="{ev_cls}">{sign}{ev*100:.1f}%</span>'
+                    f'<span class="{ev_cls}">{ev_str}</span>'
                     f'</div>'
                 )
 
