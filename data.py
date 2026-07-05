@@ -192,6 +192,38 @@ def best_odds(bm_price_dict):
 def all_odds_ranked(bm_price_dict):
     return sorted(bm_price_dict.items(), key=lambda x: x[1], reverse=True)
 
+def prop_true_prob(bm_prices_all):
+    """Tiered true-probability estimate for player props.
+
+    Priority:
+      1. Betfair Exchange price (no margin — exchange).
+      2. Pinnacle price with ~4% margin share stripped.
+      3. Median implied prob across books (min 3) with ~5% margin share stripped.
+
+    bm_prices_all should INCLUDE exchange prices (pass raw parse before exclusion).
+    Returns (true_prob, benchmark_label) or (None, None) if not enough data.
+    """
+    import statistics
+
+    bf_price = bm_prices_all.get(BENCHMARK_BM)
+    if bf_price and bf_price > 1:
+        return 1 / bf_price, "Betfair Ex"
+
+    pinn = bm_prices_all.get("pinnacle")
+    if pinn and pinn > 1:
+        # strip approx one-sided margin share (~4%)
+        return min(0.99, (1 / pinn) * 0.96), "Pinnacle (devig est)"
+
+    books = {bm: p for bm, p in bm_prices_all.items()
+             if bm not in EXCLUDED_FROM_EV and p and p > 1}
+    if len(books) >= 3:
+        implieds = [1 / p for p in books.values()]
+        med = statistics.median(implieds)
+        # strip approx one-sided soft-book margin share (~5%)
+        return min(0.99, med * 0.95), f"Median ({len(books)} books)"
+
+    return None, None
+
 def ev_opportunities(bm_price_dict, true_prob, min_ev=0.0):
     if not true_prob:
         return []
@@ -389,8 +421,6 @@ def parse_player_props(all_odds, market_name):
     all_pids    = set()
 
     for bm, bm_odds in all_odds.items():
-        if bm in EXCLUDED_FROM_EV:
-            continue
         for odd_id, odd in bm_odds.items():
             if odd.get("marketId") != market_id:
                 continue
@@ -405,8 +435,13 @@ def parse_player_props(all_odds, market_name):
             oid   = odd.get("outcomeId")
             key   = (pid, oid)
             if key not in props:
-                props[key] = {"playerId": pid, "outcomeId": oid, "bookmakers": {}}
-            props[key]["bookmakers"][bm] = price
+                props[key] = {"playerId": pid, "outcomeId": oid,
+                              "bookmakers": {}, "all_prices": {}}
+            # all_prices includes exchanges (for benchmarking)
+            props[key]["all_prices"][bm] = price
+            # bookmakers excludes exchanges (for EV betting targets)
+            if bm not in EXCLUDED_FROM_EV:
+                props[key]["bookmakers"][bm] = price
             all_pids.add(pid)
 
     # Decode lines for over/under markets
@@ -428,6 +463,7 @@ def parse_player_props(all_odds, market_name):
             "outcomeId":  oid,
             "line":       line,
             "bookmakers": pdata["bookmakers"],
+            "all_prices": pdata["all_prices"],
         })
 
     return results, all_pids

@@ -306,9 +306,10 @@ def build_opportunities(fixtures, sel_bm, sel_market):
                 if len(bm_prices) < 2:
                     continue
 
-                # Market average as true probability
-                prices     = list(bm_prices.values())
-                true_prob  = 1 / (sum(prices) / len(prices))
+                # Tiered benchmark: Betfair Ex > Pinnacle > median (min 3 books)
+                true_prob, benchmark = D.prop_true_prob(prop.get("all_prices", bm_prices))
+                if not true_prob:
+                    continue
 
                 pid        = prop["playerId"]
                 line_str   = f" Over {prop['line']}" if prop.get("line") else ""
@@ -343,7 +344,7 @@ def build_opportunities(fixtures, sel_bm, sel_market):
                     "true_prob":  true_prob,
                     "ev":         best_ev,
                     "all_prices": bm_prices,
-                    "benchmark":  "Market Avg",
+                    "benchmark":  benchmark,
                 })
 
     return sorted(opps, key=lambda x: x["ev"], reverse=True)
