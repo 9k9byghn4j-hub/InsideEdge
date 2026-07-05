@@ -86,64 +86,77 @@ if not D.API_KEY:
 # ── Filters ────────────────────────────────────────────────────────────────────
 STICKMAN_HTML = """
 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-     padding:3rem;color:#5a5a7a;font-family:'JetBrains Mono',monospace;">
+     padding:2rem;font-family:'JetBrains Mono',monospace;">
 <style>
-@keyframes ball-bounce {
-    0%,100% { cy: 118; }
-    45%     { cy: 72; }
+@keyframes head-nod {
+    0%,100% { transform: translateY(0px) rotate(0deg); }
+    20%     { transform: translateY(-14px) rotate(-8deg); }
+    40%     { transform: translateY(-18px) rotate(0deg); }
+    60%     { transform: translateY(-10px) rotate(6deg); }
+    80%     { transform: translateY(-2px) rotate(0deg); }
 }
-@keyframes kick-leg {
+@keyframes ball-arc {
+    0%      { transform: translate(0px, 0px); opacity:1; }
+    25%     { transform: translate(10px, -40px); opacity:1; }
+    50%     { transform: translate(20px, -10px); opacity:1; }
+    75%     { transform: translate(10px, -40px); opacity:1; }
+    100%    { transform: translate(0px, 0px); opacity:1; }
+}
+@keyframes arm-l {
     0%,100% { transform: rotate(0deg); }
-    40%     { transform: rotate(-35deg); }
-    50%     { transform: rotate(25deg); }
-    60%     { transform: rotate(-10deg); }
+    40%     { transform: rotate(20deg); }
 }
-@keyframes stand-leg {
+@keyframes arm-r {
     0%,100% { transform: rotate(0deg); }
-    40%     { transform: rotate(8deg); }
-    60%     { transform: rotate(-5deg); }
+    40%     { transform: rotate(-20deg); }
 }
-@keyframes body-bob {
-    0%,100% { transform: translateY(0px); }
-    50%     { transform: translateY(-3px); }
-}
-@keyframes arm-swing {
+@keyframes body-sway {
     0%,100% { transform: rotate(0deg); }
-    50%     { transform: rotate(15deg); }
+    30%     { transform: rotate(-3deg); }
+    70%     { transform: rotate(3deg); }
 }
-.sm-body   { animation: body-bob 0.7s ease-in-out infinite; transform-origin: center; }
-.sm-kick   { animation: kick-leg 0.7s ease-in-out infinite; transform-origin: 50px 58px; }
-.sm-stand  { animation: stand-leg 0.7s ease-in-out infinite; transform-origin: 30px 58px; }
-.sm-arm    { animation: arm-swing 0.7s ease-in-out infinite; transform-origin: 30px 32px; }
-.sm-ball   { animation: ball-bounce 0.7s ease-in-out infinite; }
+.sm-head  { animation: head-nod 1.2s ease-in-out infinite; transform-origin: 50px 105px; }
+.sm-body  { animation: body-sway 1.2s ease-in-out infinite; transform-origin: 50px 115px; }
+.sm-arml  { animation: arm-l 1.2s ease-in-out infinite; transform-origin: 50px 125px; }
+.sm-armr  { animation: arm-r 1.2s ease-in-out infinite; transform-origin: 50px 125px; }
+.sm-ball  { animation: ball-arc 1.2s ease-in-out infinite; }
 </style>
-<svg width="100" height="140" viewBox="0 0 100 140">
-  <!-- ball -->
-  <circle class="sm-ball" cx="62" cy="118" r="7" stroke="#00e5a0" stroke-width="2" fill="none"/>
-  <line x1="55" y1="118" x2="62" y2="112" stroke="#00e5a0" stroke-width="1" opacity="0.4"/>
-  <line x1="69" y1="118" x2="62" y2="112" stroke="#00e5a0" stroke-width="1" opacity="0.4"/>
-  <!-- head -->
-  <circle class="sm-body" cx="30" cy="12" r="9" stroke="#00e5a0" stroke-width="2" fill="none"/>
+<svg width="100" height="185" viewBox="0 0 100 185">
+  <!-- ball arc -->
+  <g class="sm-ball">
+    <circle cx="50" cy="95" r="7" stroke="#00e5a0" stroke-width="2" fill="rgba(0,229,160,0.08)"/>
+    <line x1="43" y1="91" x2="50" y2="88" stroke="#00e5a0" stroke-width="1" opacity="0.5"/>
+    <line x1="57" y1="91" x2="50" y2="88" stroke="#00e5a0" stroke-width="1" opacity="0.5"/>
+    <line x1="50" y1="95" x2="50" y2="102" stroke="#00e5a0" stroke-width="1" opacity="0.5"/>
+  </g>
+  <!-- head (nods up to meet ball) -->
+  <g class="sm-head">
+    <circle cx="50" cy="107" r="9" stroke="#00e5a0" stroke-width="2" fill="none"/>
+    <!-- face dots -->
+    <circle cx="47" cy="106" r="1" fill="#00e5a0"/>
+    <circle cx="53" cy="106" r="1" fill="#00e5a0"/>
+    <path d="M47 110 Q50 112 53 110" stroke="#00e5a0" stroke-width="1" fill="none"/>
+  </g>
   <!-- body -->
-  <line class="sm-body" x1="30" y1="21" x2="30" y2="58" stroke="#00e5a0" stroke-width="2"/>
-  <!-- left arm (balance) -->
-  <line class="sm-arm" x1="30" y1="32" x2="10" y2="45" stroke="#00e5a0" stroke-width="2"/>
-  <!-- right arm (up for balance) -->
-  <line x1="30" y1="32" x2="48" y2="22" stroke="#00e5a0" stroke-width="2"/>
-  <!-- standing leg (left) -->
-  <g class="sm-stand">
-    <line x1="30" y1="58" x2="18" y2="85" stroke="#00e5a0" stroke-width="2"/>
-    <line x1="18" y1="85" x2="14" y2="100" stroke="#00e5a0" stroke-width="2"/>
+  <g class="sm-body">
+    <line x1="50" y1="116" x2="50" y2="148" stroke="#00e5a0" stroke-width="2"/>
+    <!-- left arm -->
+    <g class="sm-arml">
+      <line x1="50" y1="125" x2="30" y2="140" stroke="#00e5a0" stroke-width="2"/>
+    </g>
+    <!-- right arm -->
+    <g class="sm-armr">
+      <line x1="50" y1="125" x2="70" y2="140" stroke="#00e5a0" stroke-width="2"/>
+    </g>
+    <!-- left leg -->
+    <line x1="50" y1="148" x2="38" y2="170" stroke="#00e5a0" stroke-width="2"/>
+    <line x1="38" y1="170" x2="33" y2="183" stroke="#00e5a0" stroke-width="2"/>
+    <!-- right leg -->
+    <line x1="50" y1="148" x2="62" y2="170" stroke="#00e5a0" stroke-width="2"/>
+    <line x1="62" y1="170" x2="67" y2="183" stroke="#00e5a0" stroke-width="2"/>
   </g>
-  <!-- kicking leg (right) -->
-  <g class="sm-kick">
-    <line x1="50" y1="58" x2="62" y2="72" stroke="#00e5a0" stroke-width="2"/>
-    <line x1="62" y1="72" x2="68" y2="58" stroke="#00e5a0" stroke-width="2"/>
-  </g>
-  <!-- hip connector -->
-  <line x1="30" y1="58" x2="50" y2="58" stroke="#00e5a0" stroke-width="2"/>
 </svg>
-<div style="margin-top:0.5rem;font-size:0.7rem;letter-spacing:0.15em">LOADING MARKETS...</div>
+<div style="margin-top:0.25rem;font-size:0.7rem;letter-spacing:0.15em;color:#5a5a7a">LOADING MARKETS...</div>
 </div>
 """
 
@@ -159,9 +172,14 @@ with f3:
     market_options = ["All Markets"] + list(D.MARKETS.keys()) + list(D.PLAYER_MARKETS.keys())
     sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
 with f4:
-    odds_range = st.slider("Odds range", min_value=1.0, max_value=100.0,
-                           value=(1.0, 50.0), step=0.5,
-                           label_visibility="collapsed")
+    odds_raw = st.slider("Odds", min_value=1, max_value=51,
+                         value=(1, 51), step=1,
+                         label_visibility="collapsed",
+                         format="%d")
+    odds_range = (float(odds_raw[0]), float("inf") if odds_raw[1] >= 51 else float(odds_raw[1]))
+    lo = odds_raw[0]
+    hi = "∞" if odds_raw[1] >= 51 else odds_raw[1]
+    st.caption(f"Odds: {lo} → {hi}")
 with f5:
     st.write("")
     if st.button("↻ Refresh"):
