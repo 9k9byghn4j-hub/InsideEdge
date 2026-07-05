@@ -234,6 +234,10 @@ if not fixtures:
 def get_odds(fid):
     return D.fetch_fixture_odds(fid)
 
+@st.cache_data(ttl=3600)
+def get_player_names(pids_tuple):
+    return D.fetch_player_names(list(pids_tuple))
+
 # ── Build EV opportunities ─────────────────────────────────────────────────────
 def build_opportunities(fixtures, sel_bm, sel_market):
     opps = []
@@ -251,13 +255,19 @@ def build_opportunities(fixtures, sel_bm, sel_market):
             if sel_market not in ("All Markets", market_name):
                 continue
 
-            bm_odds, bf_probs = D.parse_market(all_odds, mdef, home, away)
-            if not bf_probs:
-                continue
+            bm_odds, bf_probs, raw_prices = D.parse_market(all_odds, mdef, home, away)
 
             for outcome, bm_prices in bm_odds.items():
+                if not bm_prices:
+                    continue
+
+                # Benchmark: normalised Betfair book if complete,
+                # else tiered fallback (Betfair single price > Pinnacle > median)
                 true_prob = bf_probs.get(outcome)
-                if not true_prob or not bm_prices:
+                benchmark = "Betfair Exchange"
+                if not true_prob:
+                    true_prob, benchmark = D.prop_true_prob(raw_prices.get(outcome, {}))
+                if not true_prob:
                     continue
 
                 dedup_key = (fx["fixtureId"], market_name, outcome)
@@ -289,63 +299,74 @@ def build_opportunities(fixtures, sel_bm, sel_market):
                     "true_prob":  true_prob,
                     "ev":         best_ev,
                     "all_prices": bm_prices,
-                    "benchmark":  "Betfair Exchange",
+                    "benchmark":  benchmark,
                 })
 
         # ── Player prop markets ────────────────────────────────────────────────
+        # First pass: gather all props + playerIds across selected markets
+        fixture_props = []   # (market_name, prop)
+        pids_needed   = set()
         for market_name in D.PLAYER_MARKETS:
             if sel_market not in ("All Markets", market_name):
                 continue
+            props, pids = D.parse_player_props(all_odds, market_name)
+            for prop in props:
+                fixture_props.append((market_name, prop))
+                pids_needed.add(prop["playerId"])
 
-            props, _ = D.parse_player_props(all_odds, market_name)
-            if not props:
+        # Batch-fetch player names once per fixture
+        player_names = get_player_names(tuple(sorted(pids_needed))) if pids_needed else {}
+
+        for market_name, prop in fixture_props:
+            bm_prices = prop["bookmakers"]
+            if len(bm_prices) < 2:
                 continue
 
-            for prop in props:
-                bm_prices = prop["bookmakers"]
-                if len(bm_prices) < 2:
+            # Tiered benchmark: Betfair Ex > Pinnacle > median (min 3 books)
+            true_prob, benchmark = D.prop_true_prob(prop.get("all_prices", bm_prices))
+            if not true_prob:
+                continue
+
+            pid       = prop["playerId"]
+            pname     = player_names.get(pid, f"Player {pid}")
+            line_str  = f" {prop['line']}" if prop.get("line") else ""
+            # e.g. "K. Mbappé Shots 2.5" or "E. Haaland Anytime Goalscorer"
+            if prop.get("line"):
+                outcome = f"{pname} Over{line_str}"
+            else:
+                outcome = pname
+
+            dedup_key = (fx["fixtureId"], market_name, pid, prop["outcomeId"])
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+
+            best_ev, best_bm, best_price = -999, None, None
+            for bm, price in bm_prices.items():
+                if sel_bm and bm not in sel_bm:
                     continue
+                ev = D.calc_ev(true_prob, price)
+                if ev > best_ev:
+                    best_ev, best_bm, best_price = ev, bm, price
 
-                # Tiered benchmark: Betfair Ex > Pinnacle > median (min 3 books)
-                true_prob, benchmark = D.prop_true_prob(prop.get("all_prices", bm_prices))
-                if not true_prob:
-                    continue
+            if best_bm is None:
+                continue
+            if not sel_bm and best_ev <= 0:
+                continue
 
-                pid        = prop["playerId"]
-                line_str   = f" Over {prop['line']}" if prop.get("line") else ""
-                outcome    = f"Player {pid}{line_str}"
-
-                dedup_key  = (fx["fixtureId"], market_name, pid, prop["outcomeId"])
-                if dedup_key in seen:
-                    continue
-                seen.add(dedup_key)
-
-                best_ev, best_bm, best_price = -999, None, None
-                for bm, price in bm_prices.items():
-                    if sel_bm and bm not in sel_bm:
-                        continue
-                    ev = D.calc_ev(true_prob, price)
-                    if ev > best_ev:
-                        best_ev, best_bm, best_price = ev, bm, price
-
-                if best_bm is None:
-                    continue
-                if not sel_bm and best_ev <= 0:
-                    continue
-
-                opps.append({
-                    "fixtureId":  fx["fixtureId"],
-                    "match":      f"{home} v {away}",
-                    "start":      fx["start"],
-                    "market":     market_name,
-                    "outcome":    outcome,
-                    "best_bm":    best_bm,
-                    "best_price": best_price,
-                    "true_prob":  true_prob,
-                    "ev":         best_ev,
-                    "all_prices": bm_prices,
-                    "benchmark":  benchmark,
-                })
+            opps.append({
+                "fixtureId":  fx["fixtureId"],
+                "match":      f"{home} v {away}",
+                "start":      fx["start"],
+                "market":     market_name,
+                "outcome":    outcome,
+                "best_bm":    best_bm,
+                "best_price": best_price,
+                "true_prob":  true_prob,
+                "ev":         best_ev,
+                "all_prices": bm_prices,
+                "benchmark":  benchmark,
+            })
 
     return sorted(opps, key=lambda x: x["ev"], reverse=True)
 

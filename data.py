@@ -314,12 +314,17 @@ def fetch_fixture_odds(fixture_id):
     return all_odds
 
 def parse_market(all_odds, market_def, home_name=None, away_name=None):
-    """Parse a market definition into {outcome_label: {bm: price}} and bf_probs.
-    If home_name/away_name provided, substitutes 'Home'/'Away' labels."""
+    """Parse a market definition.
+    Returns:
+      result    — {outcome_label: {bm: price}} bettable books only (no exchanges)
+      bf_probs  — {outcome_label: prob} normalised Betfair Exchange probs ({} if absent)
+      raw       — {outcome_label: {bm: price}} ALL books incl. exchanges (for fallback benchmark)
+    """
     market_id   = market_def["id"]
     outcome_map = market_def["outcomes"]
 
     result  = {label: {} for label in outcome_map.values()}
+    raw     = {label: {} for label in outcome_map.values()}
     bf_raw  = {}
 
     for bm, bm_odds in all_odds.items():
@@ -342,18 +347,22 @@ def parse_market(all_odds, market_def, home_name=None, away_name=None):
             if away_name and label == "Away":
                 label = away_name
 
+            raw.setdefault(label, {})[bm] = price
             if bm == BENCHMARK_BM:
                 bf_raw[label] = calc_true_prob(price)
             elif bm not in EXCLUDED_FROM_EV:
                 result.setdefault(label, {})[bm] = price
 
-    # Normalise Betfair probs
-    if bf_raw:
+    # Normalise Betfair probs (only when Betfair priced ALL outcomes of the market;
+    # a partial book can't be normalised meaningfully)
+    if bf_raw and len(bf_raw) == len(outcome_map):
         total = sum(v for v in bf_raw.values() if v)
         if total > 0:
             bf_raw = {k: v / total for k, v in bf_raw.items() if v}
+    elif bf_raw:
+        bf_raw = {}  # partial Betfair coverage — fall back to tiered benchmark
 
-    return result, bf_raw
+    return result, bf_raw, raw
 
 def parse_correct_score(all_odds):
     """Parse correct score market — outcomes are dynamic scorelines."""
@@ -387,26 +396,37 @@ def parse_correct_score(all_odds):
 # ── Player name lookup ─────────────────────────────────────────────────────────
 
 def fetch_player_names(player_ids, api_key=None):
-    """Fetch player names for a list of playerIds.
-    Returns {playerId: playerName}"""
+    """Fetch player names via /players endpoint using playerIds filter.
+    Response format: [{"playerId": 511, "playerName": "Skjelbred, Per"}, ...]
+    Player names come as 'Surname, Firstname' — we reformat to 'Firstname Surname'.
+    Returns {playerId: display_name}"""
     if not player_ids:
         return {}
     key = api_key or API_KEY
-    try:
-        # OddsPapi v5 participants endpoint
-        ids_str = ",".join(str(pid) for pid in player_ids)
-        r = requests.get(
-            f"{BASE}/participants",
-            params={"apiKey": key, "participantIds": ids_str, "sportId": 10},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            data = r.json()
-            if isinstance(data, list):
-                return {p["participantId"]: p["participantName"] for p in data}
-        return {}
-    except Exception:
-        return {}
+    names = {}
+    pid_list = list(player_ids)
+
+    # Fetch in batches of 50 (URL length safety)
+    for i in range(0, len(pid_list), 50):
+        batch = pid_list[i:i+50]
+        ids_str = ",".join(str(pid) for pid in batch)
+        data = _get("players", {"playerIds": ids_str})
+        if data and isinstance(data, list):
+            for p in data:
+                pid  = p.get("playerId")
+                raw  = p.get("playerName", "")
+                if pid and raw:
+                    names[pid] = _format_player_name(raw)
+    return names
+
+def _format_player_name(raw):
+    """Convert 'Surname, Firstname' -> 'F. Surname' for compact display."""
+    if "," in raw:
+        surname, firstname = [s.strip() for s in raw.split(",", 1)]
+        if firstname:
+            return f"{firstname[0]}. {surname}"
+        return surname
+    return raw
 
 def parse_player_props(all_odds, market_name):
     """Parse player prop market from raw odds.
