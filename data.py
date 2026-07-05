@@ -209,7 +209,7 @@ def _get(endpoint, params):
         r = requests.get(
             f"{BASE}/{endpoint}",
             params={**params, "apiKey": API_KEY},
-            timeout=12,
+            timeout=15,
         )
         if r.status_code == 200:
             return r.json()
@@ -244,20 +244,26 @@ def fetch_fixtures(tournament_id, status_id=0):
     return fixtures
 
 def fetch_fixture_odds(fixture_id):
-    """Fetch odds across all bookmakers in chunks of 5."""
+    """Fetch odds across all bookmakers in chunks of 5 with retry."""
     all_odds = {}
     chunks = [ALL_BOOKMAKERS[i:i+5] for i in range(0, len(ALL_BOOKMAKERS), 5)]
     for chunk in chunks:
-        data = _get("fixtures/odds", {
-            "fixtureId":  fixture_id,
-            "bookmakers": ",".join(chunk),
-            "mainLine":   False,
-        })
-        if data and "odds" in data:
-            for bm, bm_odds in data["odds"].items():
-                if bm not in all_odds:
-                    all_odds[bm] = {}
-                all_odds[bm].update(bm_odds)
+        # Try up to 2 times per chunk
+        for attempt in range(2):
+            data = _get("fixtures/odds", {
+                "fixtureId":  fixture_id,
+                "bookmakers": ",".join(chunk),
+                "mainLine":   False,
+            })
+            if data and "odds" in data:
+                for bm, bm_odds in data["odds"].items():
+                    if bm not in all_odds:
+                        all_odds[bm] = {}
+                    all_odds[bm].update(bm_odds)
+                break  # success, move to next chunk
+            elif data is None:
+                import time
+                time.sleep(0.5)  # brief pause before retry
     return all_odds
 
 def parse_market(all_odds, market_def, home_name=None, away_name=None):

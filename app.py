@@ -88,43 +88,62 @@ STICKMAN_HTML = """
 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
      padding:3rem;color:#5a5a7a;font-family:'JetBrains Mono',monospace;">
 <style>
-@keyframes kick {
-    0%   { transform: rotate(0deg); }
-    25%  { transform: rotate(-20deg); }
-    50%  { transform: rotate(10deg); }
-    75%  { transform: rotate(-10deg); }
-    100% { transform: rotate(0deg); }
+@keyframes ball-bounce {
+    0%,100% { cy: 118; }
+    45%     { cy: 72; }
 }
-@keyframes ball {
-    0%   { transform: translateY(0px); }
-    50%  { transform: translateY(-18px); }
-    100% { transform: translateY(0px); }
+@keyframes kick-leg {
+    0%,100% { transform: rotate(0deg); }
+    40%     { transform: rotate(-35deg); }
+    50%     { transform: rotate(25deg); }
+    60%     { transform: rotate(-10deg); }
 }
-.stickman-wrap { position:relative; width:60px; height:100px; }
-.stickman { animation: kick 0.8s ease-in-out infinite; transform-origin: bottom center; }
-.ball { animation: ball 0.8s ease-in-out infinite; position:absolute; bottom:-10px; left:50%; }
+@keyframes stand-leg {
+    0%,100% { transform: rotate(0deg); }
+    40%     { transform: rotate(8deg); }
+    60%     { transform: rotate(-5deg); }
+}
+@keyframes body-bob {
+    0%,100% { transform: translateY(0px); }
+    50%     { transform: translateY(-3px); }
+}
+@keyframes arm-swing {
+    0%,100% { transform: rotate(0deg); }
+    50%     { transform: rotate(15deg); }
+}
+.sm-body   { animation: body-bob 0.7s ease-in-out infinite; transform-origin: center; }
+.sm-kick   { animation: kick-leg 0.7s ease-in-out infinite; transform-origin: 50px 58px; }
+.sm-stand  { animation: stand-leg 0.7s ease-in-out infinite; transform-origin: 30px 58px; }
+.sm-arm    { animation: arm-swing 0.7s ease-in-out infinite; transform-origin: 30px 32px; }
+.sm-ball   { animation: ball-bounce 0.7s ease-in-out infinite; }
 </style>
-<div class="stickman-wrap">
-<svg class="stickman" width="60" height="90" viewBox="0 0 60 90">
+<svg width="100" height="140" viewBox="0 0 100 140">
+  <!-- ball -->
+  <circle class="sm-ball" cx="62" cy="118" r="7" stroke="#00e5a0" stroke-width="2" fill="none"/>
+  <line x1="55" y1="118" x2="62" y2="112" stroke="#00e5a0" stroke-width="1" opacity="0.4"/>
+  <line x1="69" y1="118" x2="62" y2="112" stroke="#00e5a0" stroke-width="1" opacity="0.4"/>
   <!-- head -->
-  <circle cx="30" cy="10" r="8" stroke="#00e5a0" stroke-width="2" fill="none"/>
+  <circle class="sm-body" cx="30" cy="12" r="9" stroke="#00e5a0" stroke-width="2" fill="none"/>
   <!-- body -->
-  <line x1="30" y1="18" x2="30" y2="50" stroke="#00e5a0" stroke-width="2"/>
-  <!-- left arm -->
-  <line x1="30" y1="28" x2="10" y2="38" stroke="#00e5a0" stroke-width="2"/>
-  <!-- right arm up -->
-  <line x1="30" y1="28" x2="50" y2="20" stroke="#00e5a0" stroke-width="2"/>
-  <!-- left leg -->
-  <line x1="30" y1="50" x2="15" y2="75" stroke="#00e5a0" stroke-width="2"/>
-  <!-- right leg kicking -->
-  <line x1="30" y1="50" x2="50" y2="60" stroke="#00e5a0" stroke-width="2"/>
-  <line x1="50" y1="60" x2="55" y2="45" stroke="#00e5a0" stroke-width="2"/>
+  <line class="sm-body" x1="30" y1="21" x2="30" y2="58" stroke="#00e5a0" stroke-width="2"/>
+  <!-- left arm (balance) -->
+  <line class="sm-arm" x1="30" y1="32" x2="10" y2="45" stroke="#00e5a0" stroke-width="2"/>
+  <!-- right arm (up for balance) -->
+  <line x1="30" y1="32" x2="48" y2="22" stroke="#00e5a0" stroke-width="2"/>
+  <!-- standing leg (left) -->
+  <g class="sm-stand">
+    <line x1="30" y1="58" x2="18" y2="85" stroke="#00e5a0" stroke-width="2"/>
+    <line x1="18" y1="85" x2="14" y2="100" stroke="#00e5a0" stroke-width="2"/>
+  </g>
+  <!-- kicking leg (right) -->
+  <g class="sm-kick">
+    <line x1="50" y1="58" x2="62" y2="72" stroke="#00e5a0" stroke-width="2"/>
+    <line x1="62" y1="72" x2="68" y2="58" stroke="#00e5a0" stroke-width="2"/>
+  </g>
+  <!-- hip connector -->
+  <line x1="30" y1="58" x2="50" y2="58" stroke="#00e5a0" stroke-width="2"/>
 </svg>
-<svg class="ball" width="12" height="12" viewBox="0 0 12 12">
-  <circle cx="6" cy="6" r="5" stroke="#00e5a0" stroke-width="1.5" fill="none"/>
-</svg>
-</div>
-<div style="margin-top:1.5rem;font-size:0.7rem;letter-spacing:0.15em">LOADING MARKETS...</div>
+<div style="margin-top:0.5rem;font-size:0.7rem;letter-spacing:0.15em">LOADING MARKETS...</div>
 </div>
 """
 
@@ -140,8 +159,8 @@ with f3:
     market_options = ["All Markets"] + list(D.MARKETS.keys()) + list(D.PLAYER_MARKETS.keys())
     sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
 with f4:
-    odds_range = st.slider("Odds range", min_value=1.0, max_value=20.0,
-                           value=(1.0, 20.0), step=0.5,
+    odds_range = st.slider("Odds range", min_value=1.0, max_value=100.0,
+                           value=(1.0, 50.0), step=0.5,
                            label_visibility="collapsed")
 with f5:
     st.write("")
