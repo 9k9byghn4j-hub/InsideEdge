@@ -174,18 +174,16 @@ with f3:
     market_options = ["All Markets"] + list(D.MARKETS.keys()) + list(D.PLAYER_MARKETS.keys())
     sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
 with f4:
-    odds_raw = st.slider("Odds", min_value=1, max_value=51,
-                         value=(1, 51), step=1,
-                         label_visibility="collapsed",
-                         format="%d")
-    odds_range = (float(odds_raw[0]), float("inf") if odds_raw[1] >= 51 else float(odds_raw[1]))
-    lo = odds_raw[0]
-    hi = "∞" if odds_raw[1] >= 51 else odds_raw[1]
-    st.markdown(
-        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;color:#5a5a7a;margin-top:0.1rem">' +
-        f'Odds {lo} — {hi}</div>',
-        unsafe_allow_html=True
+    odds_options = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 30, 50, "∞"]
+    odds_raw = st.select_slider(
+        "Odds",
+        options=odds_options,
+        value=(1, "∞"),
+        label_visibility="collapsed",
     )
+    lo_val = float(odds_raw[0])
+    hi_val = float("inf") if odds_raw[1] == "∞" else float(odds_raw[1])
+    odds_range = (lo_val, hi_val)
 with f5:
     st.write("")
     if st.button("↻ Refresh"):
@@ -213,10 +211,6 @@ if not fixtures:
 @st.cache_data(ttl=60)
 def get_odds(fid):
     return D.fetch_fixture_odds(fid)
-
-@st.cache_data(ttl=60)
-def get_prop_odds(fid):
-    return D.fetch_player_prop_odds(fid)
 
 # ── Build EV opportunities ─────────────────────────────────────────────────────
 def build_opportunities(fixtures, sel_bm, sel_market):
@@ -281,8 +275,7 @@ def build_opportunities(fixtures, sel_bm, sel_market):
             if sel_market not in ("All Markets", market_name):
                 continue
 
-            prop_odds = get_prop_odds(fx["fixtureId"])
-            props, _ = D.parse_player_props(prop_odds, market_name)
+            props, _ = D.parse_player_props(all_odds, market_name)
             if not props:
                 continue
 

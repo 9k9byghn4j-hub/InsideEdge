@@ -244,11 +244,15 @@ def fetch_fixtures(tournament_id, status_id=0):
     return fixtures
 
 def fetch_fixture_odds(fixture_id):
-    """Fetch odds across all bookmakers in chunks of 5 with retry."""
+    """Fetch odds across all bookmakers — chunks fetched CONCURRENTLY for speed.
+    Returns everything including player props (playerId != 0)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     all_odds = {}
     chunks = [ALL_BOOKMAKERS[i:i+5] for i in range(0, len(ALL_BOOKMAKERS), 5)]
-    for chunk in chunks:
-        # Try up to 2 times per chunk
+
+    def fetch_chunk(chunk):
+        # Try twice per chunk
         for attempt in range(2):
             data = _get("fixtures/odds", {
                 "fixtureId":  fixture_id,
@@ -256,14 +260,18 @@ def fetch_fixture_odds(fixture_id):
                 "mainLine":   False,
             })
             if data and "odds" in data:
-                for bm, bm_odds in data["odds"].items():
-                    if bm not in all_odds:
-                        all_odds[bm] = {}
-                    all_odds[bm].update(bm_odds)
-                break  # success, move to next chunk
-            elif data is None:
-                import time
-                time.sleep(0.5)  # brief pause before retry
+                return data["odds"]
+        return {}
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(fetch_chunk, chunk) for chunk in chunks]
+        for future in as_completed(futures):
+            chunk_odds = future.result()
+            for bm, bm_odds in chunk_odds.items():
+                if bm not in all_odds:
+                    all_odds[bm] = {}
+                all_odds[bm].update(bm_odds)
+
     return all_odds
 
 def parse_market(all_odds, market_def, home_name=None, away_name=None):
@@ -360,32 +368,6 @@ def fetch_player_names(player_ids, api_key=None):
         return {}
     except Exception:
         return {}
-
-def fetch_player_prop_odds(fixture_id):
-    """Fetch player prop odds individually per bookmaker to maximise coverage."""
-    all_odds = {}
-    prop_bookmakers = [b for b in ALL_BOOKMAKERS if b not in EXCLUDED_FROM_EV]
-    chunks = [prop_bookmakers[i:i+5] for i in range(0, len(prop_bookmakers), 5)]
-    for chunk in chunks:
-        for attempt in range(2):
-            data = _get("fixtures/odds", {
-                "fixtureId":  fixture_id,
-                "bookmakers": ",".join(chunk),
-                "mainLine":   False,
-            })
-            if data and "odds" in data:
-                for bm, bm_odds in data["odds"].items():
-                    if bm not in all_odds:
-                        all_odds[bm] = {}
-                    # Only keep player prop odds (playerId != 0)
-                    for odd_id, odd in bm_odds.items():
-                        if odd.get("playerId", 0) != 0:
-                            all_odds[bm][odd_id] = odd
-                break
-            else:
-                import time
-                time.sleep(0.3)
-    return all_odds
 
 def parse_player_props(all_odds, market_name):
     """Parse player prop market from raw odds.
