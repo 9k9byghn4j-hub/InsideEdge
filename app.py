@@ -90,75 +90,97 @@ STICKMAN_HTML = """
 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
      padding:2rem;font-family:'JetBrains Mono',monospace;">
 <style>
-@keyframes head-nod {
-    0%,100% { transform: translateY(0px) rotate(0deg); }
-    20%     { transform: translateY(-14px) rotate(-8deg); }
-    40%     { transform: translateY(-18px) rotate(0deg); }
-    60%     { transform: translateY(-10px) rotate(6deg); }
-    80%     { transform: translateY(-2px) rotate(0deg); }
+@keyframes ku-ball {
+    0%   { transform: translate(0px, 0px) rotate(0deg); }
+    50%  { transform: translate(2px, -52px) rotate(180deg); }
+    100% { transform: translate(0px, 0px) rotate(360deg); }
 }
-@keyframes ball-arc {
-    0%      { transform: translate(0px, 0px); opacity:1; }
-    25%     { transform: translate(10px, -40px); opacity:1; }
-    50%     { transform: translate(20px, -10px); opacity:1; }
-    75%     { transform: translate(10px, -40px); opacity:1; }
-    100%    { transform: translate(0px, 0px); opacity:1; }
+@keyframes ku-thigh {
+    0%   { transform: rotate(-38deg); }
+    12%  { transform: rotate(-52deg); }
+    45%  { transform: rotate(-15deg); }
+    80%  { transform: rotate(-30deg); }
+    100% { transform: rotate(-38deg); }
 }
-@keyframes arm-l {
-    0%,100% { transform: rotate(0deg); }
-    40%     { transform: rotate(20deg); }
+@keyframes ku-shin {
+    0%   { transform: rotate(50deg); }
+    12%  { transform: rotate(75deg); }
+    45%  { transform: rotate(30deg); }
+    80%  { transform: rotate(40deg); }
+    100% { transform: rotate(50deg); }
 }
-@keyframes arm-r {
-    0%,100% { transform: rotate(0deg); }
-    40%     { transform: rotate(-20deg); }
+@keyframes ku-body {
+    0%,100% { transform: translateY(0px) rotate(-2deg); }
+    12%     { transform: translateY(-3px) rotate(-4deg); }
+    55%     { transform: translateY(1px) rotate(0deg); }
 }
-@keyframes body-sway {
-    0%,100% { transform: rotate(0deg); }
-    30%     { transform: rotate(-3deg); }
-    70%     { transform: rotate(3deg); }
+@keyframes ku-arml {
+    0%,100% { transform: rotate(-8deg); }
+    12%     { transform: rotate(-22deg); }
+    55%     { transform: rotate(5deg); }
 }
-.sm-head  { animation: head-nod 1.2s ease-in-out infinite; transform-origin: 50px 105px; }
-.sm-body  { animation: body-sway 1.2s ease-in-out infinite; transform-origin: 50px 115px; }
-.sm-arml  { animation: arm-l 1.2s ease-in-out infinite; transform-origin: 50px 125px; }
-.sm-armr  { animation: arm-r 1.2s ease-in-out infinite; transform-origin: 50px 125px; }
-.sm-ball  { animation: ball-arc 1.2s ease-in-out infinite; }
+@keyframes ku-armr {
+    0%,100% { transform: rotate(8deg); }
+    12%     { transform: rotate(25deg); }
+    55%     { transform: rotate(-5deg); }
+}
+@keyframes ku-stand {
+    0%,100% { transform: rotate(2deg); }
+    12%     { transform: rotate(4deg); }
+    55%     { transform: rotate(0deg); }
+}
+.ku-ball  { animation: ku-ball  0.85s cubic-bezier(0.35,0,0.65,1) infinite; transform-origin: 66px 128px; }
+.ku-body  { animation: ku-body  0.85s ease-in-out infinite; transform-origin: 44px 148px; }
+.ku-thigh { animation: ku-thigh 0.85s ease-in-out infinite; transform-origin: 44px 100px; }
+.ku-shin  { animation: ku-shin  0.85s ease-in-out infinite; transform-origin: 62px 112px; }
+.ku-arml  { animation: ku-arml  0.85s ease-in-out infinite; transform-origin: 44px 72px; }
+.ku-armr  { animation: ku-armr  0.85s ease-in-out infinite; transform-origin: 44px 72px; }
+.ku-stand { animation: ku-stand 0.85s ease-in-out infinite; transform-origin: 44px 100px; }
 </style>
-<svg width="100" height="185" viewBox="0 0 100 185">
-  <!-- ball arc -->
-  <g class="sm-ball">
-    <circle cx="50" cy="95" r="7" stroke="#00e5a0" stroke-width="2" fill="rgba(0,229,160,0.08)"/>
-    <line x1="43" y1="91" x2="50" y2="88" stroke="#00e5a0" stroke-width="1" opacity="0.5"/>
-    <line x1="57" y1="91" x2="50" y2="88" stroke="#00e5a0" stroke-width="1" opacity="0.5"/>
-    <line x1="50" y1="95" x2="50" y2="102" stroke="#00e5a0" stroke-width="1" opacity="0.5"/>
+<svg width="120" height="165" viewBox="0 0 120 165">
+  <!-- ground shadow -->
+  <ellipse cx="50" cy="160" rx="26" ry="3" fill="rgba(0,229,160,0.08)"/>
+
+  <!-- ball: bounces off the foot, spins as it rises -->
+  <g class="ku-ball">
+    <circle cx="66" cy="128" r="8" stroke="#00e5a0" stroke-width="2" fill="rgba(0,229,160,0.06)"/>
+    <path d="M60 124 L66 128 L72 124 M66 128 L66 136" stroke="#00e5a0" stroke-width="1" fill="none" opacity="0.55"/>
   </g>
-  <!-- head (nods up to meet ball) -->
-  <g class="sm-head">
-    <circle cx="50" cy="107" r="9" stroke="#00e5a0" stroke-width="2" fill="none"/>
-    <!-- face dots -->
-    <circle cx="47" cy="106" r="1" fill="#00e5a0"/>
-    <circle cx="53" cy="106" r="1" fill="#00e5a0"/>
-    <path d="M47 110 Q50 112 53 110" stroke="#00e5a0" stroke-width="1" fill="none"/>
+
+  <g class="ku-body">
+    <!-- head -->
+    <circle cx="44" cy="52" r="9" stroke="#00e5a0" stroke-width="2" fill="none"/>
+    <circle cx="47" cy="50" r="1.1" fill="#00e5a0"/>
+    <path d="M44 56 Q47 57.5 49 55.5" stroke="#00e5a0" stroke-width="1" fill="none"/>
+    <!-- torso, slight lean back -->
+    <path d="M44 61 Q42 80 44 100" stroke="#00e5a0" stroke-width="2" fill="none"/>
+    <!-- left arm: out for balance -->
+    <g class="ku-arml">
+      <path d="M44 72 Q28 76 20 88" stroke="#00e5a0" stroke-width="2" fill="none"/>
+    </g>
+    <!-- right arm: swings opposite -->
+    <g class="ku-armr">
+      <path d="M44 72 Q60 74 70 66" stroke="#00e5a0" stroke-width="2" fill="none"/>
+    </g>
   </g>
-  <!-- body -->
-  <g class="sm-body">
-    <line x1="50" y1="116" x2="50" y2="148" stroke="#00e5a0" stroke-width="2"/>
-    <!-- left arm -->
-    <g class="sm-arml">
-      <line x1="50" y1="125" x2="30" y2="140" stroke="#00e5a0" stroke-width="2"/>
+
+  <!-- standing leg: slight flex on each touch -->
+  <g class="ku-stand">
+    <path d="M44 100 Q40 122 38 142" stroke="#00e5a0" stroke-width="2" fill="none"/>
+    <line x1="38" y1="142" x2="30" y2="158" stroke="#00e5a0" stroke-width="2"/>
+    <line x1="30" y1="158" x2="40" y2="159" stroke="#00e5a0" stroke-width="2"/>
+  </g>
+
+  <!-- juggling leg: thigh + shin chained rotation, foot meets ball -->
+  <g class="ku-thigh">
+    <line x1="44" y1="100" x2="62" y2="112" stroke="#00e5a0" stroke-width="2"/>
+    <g class="ku-shin">
+      <line x1="62" y1="112" x2="66" y2="128" stroke="#00e5a0" stroke-width="2"/>
+      <line x1="66" y1="128" x2="76" y2="126" stroke="#00e5a0" stroke-width="2"/>
     </g>
-    <!-- right arm -->
-    <g class="sm-armr">
-      <line x1="50" y1="125" x2="70" y2="140" stroke="#00e5a0" stroke-width="2"/>
-    </g>
-    <!-- left leg -->
-    <line x1="50" y1="148" x2="38" y2="170" stroke="#00e5a0" stroke-width="2"/>
-    <line x1="38" y1="170" x2="33" y2="183" stroke="#00e5a0" stroke-width="2"/>
-    <!-- right leg -->
-    <line x1="50" y1="148" x2="62" y2="170" stroke="#00e5a0" stroke-width="2"/>
-    <line x1="62" y1="170" x2="67" y2="183" stroke="#00e5a0" stroke-width="2"/>
   </g>
 </svg>
-<div style="margin-top:0.25rem;font-size:0.7rem;letter-spacing:0.15em;color:#5a5a7a">LOADING MARKETS...</div>
+<div style="margin-top:0.4rem;font-size:0.7rem;letter-spacing:0.15em;color:#5a5a7a">LOADING MARKETS...</div>
 </div>
 """
 
@@ -338,6 +360,30 @@ with m1: st.metric("Fixtures Scanned", min(len(fixtures), 6))
 with m2: st.metric("EV Opportunities", len(pos_opps))
 with m3: st.metric("Best EV", f"+{pos_opps[0]['ev']*100:.1f}%" if pos_opps else "—")
 with m4: st.metric("Markets Scanned", len(D.MARKETS) + len(D.PLAYER_MARKETS))
+
+# Bookmaker coverage debug — see exactly who returned data
+with st.expander("🔍 Bookmaker coverage", expanded=False):
+    coverage = {}
+    for fx in fixtures[:6]:
+        odds = get_odds(fx["fixtureId"])
+        for bm, bm_odds in odds.items():
+            props = sum(1 for o in bm_odds.values() if o.get("playerId", 0) != 0)
+            if bm not in coverage:
+                coverage[bm] = {"odds": 0, "props": 0}
+            coverage[bm]["odds"]  += len(bm_odds)
+            coverage[bm]["props"] += props
+    missing = [b for b in D.ALL_BOOKMAKERS if b not in coverage and b not in D.EXCLUDED_FROM_EV]
+    for bm in sorted(coverage, key=lambda b: -coverage[b]["odds"]):
+        c = coverage[bm]
+        st.markdown(
+            f'<span style="font-family:JetBrains Mono,monospace;font-size:0.72rem;color:#9a9ab0">'
+            f'{D.bm_label(bm)}: {c["odds"]} odds · {c["props"]} player props</span>',
+            unsafe_allow_html=True)
+    if missing:
+        st.markdown(
+            f'<span style="font-family:JetBrains Mono,monospace;font-size:0.72rem;color:#ff4d6d">'
+            f'No data: {", ".join(D.bm_label(b) for b in missing)}</span>',
+            unsafe_allow_html=True)
 
 st.write("")
 

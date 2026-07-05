@@ -204,18 +204,26 @@ def ev_opportunities(bm_price_dict, true_prob, min_ev=0.0):
 
 # ── API ────────────────────────────────────────────────────────────────────────
 
-def _get(endpoint, params):
-    try:
-        r = requests.get(
-            f"{BASE}/{endpoint}",
-            params={**params, "apiKey": API_KEY},
-            timeout=15,
-        )
-        if r.status_code == 200:
-            return r.json()
-        return None
-    except Exception:
-        return None
+def _get(endpoint, params, retries=3):
+    """GET with retry and backoff — handles trial-key rate limits."""
+    import time
+    for attempt in range(retries):
+        try:
+            r = requests.get(
+                f"{BASE}/{endpoint}",
+                params={**params, "apiKey": API_KEY},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 429:
+                # Rate limited — back off and retry
+                time.sleep(0.6 * (attempt + 1))
+                continue
+            return None
+        except Exception:
+            time.sleep(0.4 * (attempt + 1))
+    return None
 
 def fetch_fixtures(tournament_id, status_id=0):
     data = _get("fixtures", {
@@ -244,7 +252,8 @@ def fetch_fixtures(tournament_id, status_id=0):
     return fixtures
 
 def fetch_fixture_odds(fixture_id):
-    """Fetch odds across all bookmakers — chunks fetched CONCURRENTLY for speed.
+    """Fetch odds across all bookmakers — chunks fetched concurrently (3 workers
+    to stay under trial-key rate limits). _get handles retry/backoff on 429s.
     Returns everything including player props (playerId != 0)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -252,18 +261,16 @@ def fetch_fixture_odds(fixture_id):
     chunks = [ALL_BOOKMAKERS[i:i+5] for i in range(0, len(ALL_BOOKMAKERS), 5)]
 
     def fetch_chunk(chunk):
-        # Try twice per chunk
-        for attempt in range(2):
-            data = _get("fixtures/odds", {
-                "fixtureId":  fixture_id,
-                "bookmakers": ",".join(chunk),
-                "mainLine":   False,
-            })
-            if data and "odds" in data:
-                return data["odds"]
+        data = _get("fixtures/odds", {
+            "fixtureId":  fixture_id,
+            "bookmakers": ",".join(chunk),
+            "mainLine":   False,
+        })
+        if data and "odds" in data:
+            return data["odds"]
         return {}
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         futures = [pool.submit(fetch_chunk, chunk) for chunk in chunks]
         for future in as_completed(futures):
             chunk_odds = future.result()
