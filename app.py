@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import data as D
 
 st.set_page_config(
@@ -66,26 +66,6 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] { font-family:'JetB
 </style>
 """, unsafe_allow_html=True)
 
-# ── Session state ──────────────────────────────────────────────────────────────
-if "expanded" not in st.session_state:
-    st.session_state.expanded = None
-
-# ── Top bar ────────────────────────────────────────────────────────────────────
-from datetime import timezone, timedelta
-bst = timezone(timedelta(hours=1))
-now = datetime.now(bst).strftime("%d %b %Y  %H:%M BST")
-st.markdown(f"""
-<div class="topbar">
-    <div class="logo">INSIDE<span>EDGE</span></div>
-    <div class="timestamp">{now}</div>
-</div>
-""", unsafe_allow_html=True)
-
-if not D.API_KEY:
-    st.error("Add ODDSPAPI_KEY to your Streamlit secrets.")
-    st.stop()
-
-# ── Filters ────────────────────────────────────────────────────────────────────
 STICKMAN_HTML = """
 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
      padding:2rem;font-family:'JetBrains Mono',monospace;">
@@ -184,52 +164,41 @@ STICKMAN_HTML = """
 </div>
 """
 
-f1, f2, f3, f4, f5 = st.columns([2, 2, 1.8, 1.5, 0.8])
-with f1:
-    sport_label = st.selectbox("Sport", list(D.SPORTS.keys()), label_visibility="collapsed")
-with f2:
-    all_bm = [b for b in D.ALL_BOOKMAKERS if b not in D.EXCLUDED_FROM_EV]
-    sel_bm = st.multiselect("Bookmakers", options=all_bm, format_func=D.bm_label,
-                             default=[], placeholder="All bookmakers",
-                             label_visibility="collapsed")
-with f3:
-    market_options = ["All Markets"] + list(D.MARKETS.keys()) + list(D.PLAYER_MARKETS.keys())
-    sel_market = st.selectbox("Market", market_options, label_visibility="collapsed")
-with f4:
-    odds_options = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 30, 50, "∞"]
-    odds_raw = st.select_slider(
-        "Odds",
-        options=odds_options,
-        value=(1, "∞"),
-        label_visibility="collapsed",
-    )
-    lo_val = float(odds_raw[0])
-    hi_val = float("inf") if odds_raw[1] == "∞" else float(odds_raw[1])
-    odds_range = (lo_val, hi_val)
-with f5:
-    st.write("")
-    if st.button("↻ Refresh"):
-        st.cache_data.clear()
-        st.session_state.expanded = None
-        st.rerun()
+# ── Session state ──────────────────────────────────────────────────────────────
+if "expanded" not in st.session_state:
+    st.session_state.expanded = None
 
-sport_cfg = D.SPORTS[sport_label]
+# ── Top bar ────────────────────────────────────────────────────────────────────
+bst = timezone(timedelta(hours=1))
+now = datetime.now(bst).strftime("%d %b %Y  %H:%M BST")
+st.markdown(f"""
+<div class="topbar">
+    <div class="logo">INSIDE<span>EDGE</span></div>
+    <div class="timestamp">{now}</div>
+</div>
+""", unsafe_allow_html=True)
 
-# ── Fetch fixtures ─────────────────────────────────────────────────────────────
+if not D.API_KEY:
+    st.error("Add ODDSPAPI_KEY to your Streamlit secrets.")
+    st.stop()
+
+# ── Cached data access ─────────────────────────────────────────────────────────
+@st.cache_data(ttl=3600)
+def get_sports():
+    return D.fetch_sports()
+
+@st.cache_data(ttl=600)
+def get_tournaments(sport_id):
+    return D.fetch_tournaments(sport_id)
+
+@st.cache_data(ttl=3600)
+def get_market_names(sport_id):
+    return D.fetch_market_names(sport_id)
+
 @st.cache_data(ttl=120)
 def get_fixtures(tid):
     return D.fetch_fixtures(tid)
 
-fixtures_placeholder = st.empty()
-fixtures_placeholder.markdown(STICKMAN_HTML, unsafe_allow_html=True)
-fixtures = get_fixtures(sport_cfg["id"])
-fixtures_placeholder.empty()
-
-if not fixtures:
-    st.markdown('<div class="no-data">No upcoming fixtures found.</div>', unsafe_allow_html=True)
-    st.stop()
-
-# ── Fetch odds per fixture (cached individually) ───────────────────────────────
 @st.cache_data(ttl=60)
 def get_odds(fid):
     return D.fetch_fixture_odds(fid)
@@ -238,155 +207,185 @@ def get_odds(fid):
 def get_player_names(pids_tuple):
     return D.fetch_player_names(list(pids_tuple))
 
-# ── Build EV opportunities ─────────────────────────────────────────────────────
-def build_opportunities(fixtures, sel_bm, sel_market):
+# ── Resolve sport IDs dynamically ──────────────────────────────────────────────
+WANTED_SPORTS = {"⚽  Football": "soccer", "⛳  Golf": "golf", "🏏  Cricket": "cricket"}
+
+@st.cache_data(ttl=3600)
+def resolve_sports():
+    sports = get_sports()
+    resolved = {}
+    for label, keyword in WANTED_SPORTS.items():
+        for s in sports:
+            name = (s.get("sportName") or "").lower()
+            if keyword in name:
+                resolved[label] = s.get("sportId")
+                break
+    # Football fallback — we know it is 10
+    if "⚽  Football" not in resolved:
+        resolved["⚽  Football"] = 10
+    return resolved
+
+sport_map = resolve_sports()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FILTERS — Sport first, then Fixture
+# ══════════════════════════════════════════════════════════════════════════════
+s1, s2 = st.columns([2, 0.6])
+with s1:
+    sport_label = st.selectbox("Sport", list(sport_map.keys()), label_visibility="collapsed")
+with s2:
+    st.write("")
+    if st.button("↻ Refresh"):
+        st.cache_data.clear()
+        st.session_state.expanded = None
+        st.rerun()
+
+sport_id = sport_map[sport_label]
+
+# Load fixtures for the sport — top tournaments by upcoming fixtures
+loading = st.empty()
+loading.markdown(STICKMAN_HTML, unsafe_allow_html=True)
+
+tournaments = get_tournaments(sport_id)
+# rank tournaments by upcoming fixture count where available
+def t_count(t):
+    return (t.get("upcomingFixtures") or 0) + (t.get("futureFixtures") or 0)
+tournaments = sorted(tournaments, key=t_count, reverse=True)
+
+fixtures = []
+for t in tournaments[:4]:
+    tid = t.get("tournamentId")
+    if tid:
+        fixtures.extend(get_fixtures(tid))
+fixtures = sorted(fixtures, key=lambda f: f.get("start_ts", 0))[:10]
+
+loading.empty()
+
+if not fixtures:
+    st.markdown('<div class="no-data">No upcoming fixtures found for this sport.</div>',
+                unsafe_allow_html=True)
+    st.stop()
+
+# Fixture filter — below sport
+fixture_names = ["All fixtures"] + [f"{fx['home']} v {fx['away']}  ·  {fx['start']}" for fx in fixtures]
+sel_fixture = st.selectbox("Fixture", fixture_names, label_visibility="collapsed")
+
+if sel_fixture != "All fixtures":
+    idx = fixture_names.index(sel_fixture) - 1
+    scan_fixtures = [fixtures[idx]]
+else:
+    scan_fixtures = fixtures[:6]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SCAN — generic across every market and bookmaker
+# ══════════════════════════════════════════════════════════════════════════════
+market_names = get_market_names(sport_id)
+
+def build_opportunities(scan_fixtures):
     opps = []
     seen = set()
 
-    # Limit to next 6 fixtures to keep load time fast
-    for fx in fixtures[:6]:
+    for fx in scan_fixtures:
         all_odds = get_odds(fx["fixtureId"])
         if not all_odds:
             continue
-        home, away = fx["home"], fx["away"]
 
-        # ── Match markets ──────────────────────────────────────────────────────
-        for market_name, mdef in D.MARKETS.items():
-            if sel_market not in ("All Markets", market_name):
+        groups = D.scan_all_markets(all_odds, market_names)
+
+        # Collect playerIds for name merge
+        pids = {g["playerId"] for g in groups if g["playerId"]}
+        names = get_player_names(tuple(sorted(pids))) if pids else {}
+
+        for g in groups:
+            bm_prices = g["bookmakers"]
+            if len(g["all_prices"]) < 2 or not bm_prices:
                 continue
 
-            bm_odds, bf_probs, raw_prices = D.parse_market(all_odds, mdef, home, away)
-
-            for outcome, bm_prices in bm_odds.items():
-                if not bm_prices:
-                    continue
-
-                # Benchmark: normalised Betfair book if complete,
-                # else tiered fallback (Betfair single price > Pinnacle > median)
-                true_prob = bf_probs.get(outcome)
-                benchmark = "Betfair Exchange"
-                if not true_prob:
-                    true_prob, benchmark = D.prop_true_prob(raw_prices.get(outcome, {}))
-                if not true_prob:
-                    continue
-
-                dedup_key = (fx["fixtureId"], market_name, outcome)
-                if dedup_key in seen:
-                    continue
-                seen.add(dedup_key)
-
-                best_ev, best_bm, best_price = -999, None, None
-                for bm, price in bm_prices.items():
-                    if sel_bm and bm not in sel_bm:
-                        continue
-                    ev = D.calc_ev(true_prob, price)
-                    if ev > best_ev:
-                        best_ev, best_bm, best_price = ev, bm, price
-
-                if best_bm is None:
-                    continue
-                if not sel_bm and best_ev <= 0:
-                    continue
-
-                opps.append({
-                    "fixtureId":  fx["fixtureId"],
-                    "match":      f"{home} v {away}",
-                    "start":      fx["start"],
-                    "market":     market_name,
-                    "outcome":    outcome,
-                    "best_bm":    best_bm,
-                    "best_price": best_price,
-                    "true_prob":  true_prob,
-                    "ev":         best_ev,
-                    "all_prices": bm_prices,
-                    "benchmark":  benchmark,
-                })
-
-        # ── Player prop markets ────────────────────────────────────────────────
-        # First pass: gather all props + playerIds across selected markets
-        fixture_props = []   # (market_name, prop)
-        pids_needed   = set()
-        for market_name in D.PLAYER_MARKETS:
-            if sel_market not in ("All Markets", market_name):
-                continue
-            props, pids = D.parse_player_props(all_odds, market_name)
-            for prop in props:
-                fixture_props.append((market_name, prop))
-                pids_needed.add(prop["playerId"])
-
-        # Batch-fetch player names once per fixture
-        player_names = get_player_names(tuple(sorted(pids_needed))) if pids_needed else {}
-
-        for market_name, prop in fixture_props:
-            bm_prices = prop["bookmakers"]
-            if len(bm_prices) < 2:
-                continue
-
-            # Tiered benchmark: Betfair Ex > Pinnacle > median (min 3 books)
-            true_prob, benchmark = D.prop_true_prob(prop.get("all_prices", bm_prices))
+            true_prob, benchmark = D.market_true_prob(g["all_prices"])
             if not true_prob:
                 continue
 
-            pid       = prop["playerId"]
-            pname     = player_names.get(pid, f"Player {pid}")
-            line_str  = f" {prop['line']}" if prop.get("line") else ""
-            # e.g. "K. Mbappé Shots 2.5" or "E. Haaland Anytime Goalscorer"
-            if prop.get("line"):
-                outcome = f"{pname} Over{line_str}"
-            else:
-                outcome = pname
-
-            dedup_key = (fx["fixtureId"], market_name, pid, prop["outcomeId"])
-            if dedup_key in seen:
+            dedup = (fx["fixtureId"], g["marketId"], g["outcomeId"],
+                     g["playerId"], g["handicap"])
+            if dedup in seen:
                 continue
-            seen.add(dedup_key)
+            seen.add(dedup)
 
-            best_ev, best_bm, best_price = -999, None, None
-            for bm, price in bm_prices.items():
-                if sel_bm and bm not in sel_bm:
-                    continue
-                ev = D.calc_ev(true_prob, price)
-                if ev > best_ev:
-                    best_ev, best_bm, best_price = ev, bm, price
+            # Build outcome label
+            label = g["marketName"]
+            if g["playerId"]:
+                pname = names.get(g["playerId"], f"Player {g['playerId']}")
+                label = f"{pname} — {label}"
+            if g["handicap"] is not None:
+                label += f" {g['handicap']}"
 
-            if best_bm is None:
-                continue
-            if not sel_bm and best_ev <= 0:
+            best_price, best_bm = D.best_odds(bm_prices)
+            ev = D.calc_ev(true_prob, best_price)
+            if ev <= 0:
                 continue
 
             opps.append({
                 "fixtureId":  fx["fixtureId"],
-                "match":      f"{home} v {away}",
+                "match":      f"{fx['home']} v {fx['away']}",
                 "start":      fx["start"],
-                "market":     market_name,
-                "outcome":    outcome,
+                "market":     g["marketName"],
+                "outcome":    label,
                 "best_bm":    best_bm,
                 "best_price": best_price,
                 "true_prob":  true_prob,
-                "ev":         best_ev,
+                "ev":         ev,
                 "all_prices": bm_prices,
                 "benchmark":  benchmark,
             })
 
     return sorted(opps, key=lambda x: x["ev"], reverse=True)
 
-opps_placeholder = st.empty()
-opps_placeholder.markdown(STICKMAN_HTML, unsafe_allow_html=True)
-opportunities = build_opportunities(fixtures, set(sel_bm), sel_market)
-opps_placeholder.empty()
+scan_placeholder = st.empty()
+scan_placeholder.markdown(STICKMAN_HTML, unsafe_allow_html=True)
+all_opportunities = build_opportunities(scan_fixtures)
+scan_placeholder.empty()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECONDARY FILTERS — market, bookmaker, odds (post-scan, options from real data)
+# ══════════════════════════════════════════════════════════════════════════════
+f1, f2, f3 = st.columns([2, 2, 1.8])
+with f1:
+    discovered_markets = sorted({o["market"] for o in all_opportunities})
+    sel_market = st.selectbox("Market", ["All Markets"] + discovered_markets,
+                              label_visibility="collapsed")
+with f2:
+    discovered_bms = sorted({o["best_bm"] for o in all_opportunities})
+    sel_bm = st.multiselect("Bookmakers", options=discovered_bms,
+                            format_func=D.bm_label, default=[],
+                            placeholder="All bookmakers",
+                            label_visibility="collapsed")
+with f3:
+    odds_options = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 30, 50, "∞"]
+    odds_raw = st.select_slider("Odds", options=odds_options, value=(1, "∞"),
+                                label_visibility="collapsed")
+    lo_val = float(odds_raw[0])
+    hi_val = float("inf") if odds_raw[1] == "∞" else float(odds_raw[1])
+
+opportunities = [
+    o for o in all_opportunities
+    if (sel_market == "All Markets" or o["market"] == sel_market)
+    and (not sel_bm or o["best_bm"] in sel_bm)
+    and lo_val <= o["best_price"] <= hi_val
+]
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
-pos_opps = [o for o in opportunities if o["ev"] > 0]
 m1, m2, m3, m4 = st.columns(4)
-with m1: st.metric("Fixtures Scanned", min(len(fixtures), 6))
-with m2: st.metric("EV Opportunities", len(pos_opps))
-with m3: st.metric("Best EV", f"+{pos_opps[0]['ev']*100:.1f}%" if pos_opps else "—")
-with m4: st.metric("Markets Scanned", len(D.MARKETS) + len(D.PLAYER_MARKETS))
+with m1: st.metric("Fixtures Scanned", len(scan_fixtures))
+with m2: st.metric("EV Opportunities", len(opportunities))
+with m3: st.metric("Best EV", f"+{opportunities[0]['ev']*100:.1f}%" if opportunities else "—")
+with m4: st.metric("Markets Found", len(discovered_markets))
 
-# Bookmaker coverage debug — see exactly who returned data
+st.write("")
+
+# ── Coverage debug ─────────────────────────────────────────────────────────────
 with st.expander("🔍 Bookmaker coverage", expanded=False):
     coverage = {}
-    for fx in fixtures[:6]:
+    for fx in scan_fixtures:
         odds = get_odds(fx["fixtureId"])
         for bm, bm_odds in odds.items():
             props = sum(1 for o in bm_odds.values() if o.get("playerId", 0) != 0)
@@ -407,32 +406,24 @@ with st.expander("🔍 Bookmaker coverage", expanded=False):
             f'No data: {", ".join(D.bm_label(b) for b in missing)}</span>',
             unsafe_allow_html=True)
 
-st.write("")
-
 # ── EV Feed ────────────────────────────────────────────────────────────────────
-label = (f"{D.bm_label(sel_bm[0])} Markets" if len(sel_bm) == 1
-         else "Selected Bookmakers" if sel_bm
-         else "Best Bets Right Now")
-st.markdown(f'<div class="section-label">{label}</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Best Bets Right Now</div>', unsafe_allow_html=True)
 
-display_opps = [
-    o for o in opportunities
-    if odds_range[0] <= o["best_price"] <= odds_range[1]
-][:20]
+display_opps = opportunities[:20]
 
 if not display_opps:
     st.markdown(
-        '<div class="no-data">No opportunities found.<br>'
-        '<span style="font-size:0.65rem">Try selecting a bookmaker or refreshing.</span></div>',
+        '<div class="no-data">No opportunities match your filters.<br>'
+        '<span style="font-size:0.65rem">Try widening the odds range or clearing filters.</span></div>',
         unsafe_allow_html=True)
 else:
     for opp in display_opps:
-        card_id    = f"{opp['fixtureId']}_{opp['market']}_{opp['outcome']}"
+        card_id = f"{opp['fixtureId']}_{opp['market']}_{opp['outcome']}"
         is_expanded = st.session_state.expanded == card_id
-        ev_pct     = opp["ev"] * 100
-        bar_width  = min(ev_pct * 5, 100)
-        bm_imp     = 1 / opp["best_price"]
-        edge       = opp["true_prob"] - bm_imp
+        ev_pct    = opp["ev"] * 100
+        bar_width = min(ev_pct * 5, 100)
+        bm_imp    = 1 / opp["best_price"]
+        edge      = opp["true_prob"] - bm_imp
 
         st.markdown(f"""
         <div class="ev-card">
@@ -480,11 +471,9 @@ else:
                 ev     = D.calc_ev(true_prob, price)
                 od_cls = "bm-odds-best" if price == best_price else "bm-odds"
                 if ev > 0:
-                    ev_str = f"+{ev*100:.1f}%"
-                    ev_cls = "bm-ev-pos"
+                    ev_str, ev_cls = f"+{ev*100:.1f}%", "bm-ev-pos"
                 else:
-                    ev_str = f"{ev*100:.1f}%"
-                    ev_cls = "bm-ev-neg"
+                    ev_str, ev_cls = f"{ev*100:.1f}%", "bm-ev-neg"
                 rows_html += (
                     f'<div class="bm-row">'
                     f'<span class="bm-name">{D.bm_label(bm)}</span>'
@@ -495,7 +484,7 @@ else:
 
             st.markdown(f"""
             <div class="expanded-card">
-                <div class="expanded-title">{opp['outcome']} — {opp['market']} — {opp['match']}</div>
+                <div class="expanded-title">{opp['outcome']} — {opp['match']}</div>
                 <div style="margin-bottom:0.5rem;font-family:'JetBrains Mono',monospace;
                      font-size:0.65rem;color:#5a5a7a">
                     True prob ({opp['benchmark']}): {true_prob*100:.1f}%
@@ -503,66 +492,3 @@ else:
                 {rows_html}
             </div>
             """, unsafe_allow_html=True)
-
-st.write("")
-
-# ── Match search ───────────────────────────────────────────────────────────────
-st.markdown('<div class="section-label">Match Search</div>', unsafe_allow_html=True)
-query = st.text_input("Search", placeholder="Type a team name — e.g. England, Brazil...",
-                      label_visibility="collapsed")
-
-if query.strip():
-    matches = [fx for fx in fixtures
-               if query.lower() in fx["home"].lower()
-               or query.lower() in fx["away"].lower()]
-
-    if not matches:
-        st.markdown(f'<div style="color:#5a5a7a;font-family:JetBrains Mono,monospace;'
-                    f'font-size:0.75rem;padding:0.5rem 0">No matches found for "{query}"</div>',
-                    unsafe_allow_html=True)
-    else:
-        if len(matches) > 1:
-            sel = st.selectbox("Select", [f"{m['home']} v {m['away']}" for m in matches],
-                               label_visibility="collapsed")
-            fx = next(m for m in matches if f"{m['home']} v {m['away']}" == sel)
-        else:
-            fx = matches[0]
-
-        fx_opps = [o for o in opportunities
-                   if o["fixtureId"] == fx["fixtureId"]
-                   and o["ev"] > 0
-                   and odds_range[0] <= o["best_price"] <= odds_range[1]]
-
-        if not fx_opps:
-            st.markdown('<div class="no-data">No positive EV opportunities for this fixture yet.</div>',
-                        unsafe_allow_html=True)
-        else:
-            for opp in fx_opps[:10]:
-                ev_pct    = opp["ev"] * 100
-                bar_width = min(ev_pct * 5, 100)
-                bm_imp    = 1 / opp["best_price"]
-                st.markdown(f"""
-                <div class="ev-card" style="margin-bottom:0.4rem;">
-                    <div class="ev-card-accent"></div>
-                    <div class="ev-card-top">
-                        <div>
-                            <div class="ev-card-match">{opp['outcome']}</div>
-                            <div class="ev-card-meta">
-                                <span class="market-tag">{opp['market']}</span>
-                            </div>
-                        </div>
-                        <div style="text-align:right;flex-shrink:0;margin-left:1rem">
-                            <div class="ev-badge">+{ev_pct:.1f}%</div>
-                        </div>
-                    </div>
-                    <div class="ev-card-bottom">
-                        <span class="bookie-tag">{D.bm_label(opp['best_bm'])}</span>
-                        <span class="odds-tag">{opp['best_price']:.2f}</span>
-                        <span class="prob-tag">True: {opp['true_prob']*100:.1f}%
-                            &nbsp;·&nbsp; Implied: {bm_imp*100:.1f}%</span>
-                    </div>
-                    <div class="ev-bar-wrap">
-                        <div class="ev-bar-fill" style="width:{bar_width}%"></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)

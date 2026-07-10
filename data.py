@@ -487,3 +487,65 @@ def parse_player_props(all_odds, market_name):
         })
 
     return results, all_pids
+
+# ── v2: dynamic sports, tournaments, market names ──────────────────────────────
+
+def fetch_sports():
+    """List all sports available. Returns [{sportId, sportName}, ...]"""
+    data = _get("sports", {})
+    return data if isinstance(data, list) else []
+
+def fetch_tournaments(sport_id):
+    """List tournaments for a sport."""
+    data = _get("tournaments", {"sportId": sport_id})
+    return data if isinstance(data, list) else []
+
+def fetch_market_names(sport_id):
+    """Map marketId -> marketName for a sport."""
+    data = _get("markets", {"sportId": sport_id})
+    if isinstance(data, list):
+        return {m.get("marketId"): m.get("marketName") for m in data if m.get("marketId")}
+    return {}
+
+def market_true_prob(all_prices):
+    """True probability = implied prob of the LOWEST odds in the market
+    (the sharpest price). Requires at least 2 books to be meaningful.
+    Returns (true_prob, benchmark_label) or (None, None)."""
+    prices = [p for p in all_prices.values() if p and p > 1]
+    if len(prices) < 2:
+        return None, None
+    return 1 / min(prices), "Sharpest Price"
+
+def scan_all_markets(all_odds, market_names):
+    """Generic scanner: group EVERY odd across bookmakers by
+    (marketId, outcomeId, playerId, handicap). Nothing pre-mapped, nothing missed.
+    Returns list of groups: {marketId, marketName, outcomeId, playerId, handicap,
+                             all_prices, bookmakers}"""
+    groups = {}
+    for bm, bm_odds in all_odds.items():
+        for odd_id, odd in bm_odds.items():
+            if not odd.get("active", True):
+                continue
+            price = odd.get("price")
+            if not price or price <= 1:
+                continue
+            mid  = odd.get("marketId")
+            oid  = odd.get("outcomeId")
+            pid  = odd.get("playerId", 0)
+            hcp  = odd.get("handicap")
+            key  = (mid, oid, pid, hcp)
+            if key not in groups:
+                groups[key] = {
+                    "marketId":   mid,
+                    "marketName": market_names.get(mid, f"Market {mid}"),
+                    "outcomeId":  oid,
+                    "playerId":   pid,
+                    "handicap":   hcp,
+                    "all_prices": {},   # every book incl exchanges (benchmark)
+                    "bookmakers": {},   # bettable books only (EV targets)
+                }
+            g = groups[key]
+            g["all_prices"][bm] = price
+            if bm not in EXCLUDED_FROM_EV:
+                g["bookmakers"][bm] = price
+    return list(groups.values())
