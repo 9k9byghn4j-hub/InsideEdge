@@ -417,8 +417,8 @@ if not display_opps:
         '<span style="font-size:0.65rem">Try widening the odds range or clearing filters.</span></div>',
         unsafe_allow_html=True)
 else:
-    for opp in display_opps:
-        card_id = f"{opp['fixtureId']}_{opp['market']}_{opp['outcome']}"
+    for idx, opp in enumerate(display_opps):
+        card_id = f"{idx}_{opp['fixtureId']}_{opp['market']}_{opp['outcome']}"
         is_expanded = st.session_state.expanded == card_id
         ev_pct    = opp["ev"] * 100
         bar_width = min(ev_pct * 5, 100)
