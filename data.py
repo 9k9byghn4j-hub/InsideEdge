@@ -320,7 +320,8 @@ def scan_all_markets(all_odds, market_names):
     Player markets: return ALL entries regardless of edge (show every player/line).
     """
     MIN_EDGE_PCT = 1.0   # minimum % above average for match markets
-    MIN_BOOKS    = 2     # need at least 2 books to compare meaningfully
+    MIN_BOOKS_MATCH  = 4  # match markets need 4+ books for reliable avg
+    MIN_BOOKS_PLAYER = 2  # player props need 2+ books
 
     raw = {}
     for bm, bm_odds in all_odds.items():
@@ -352,7 +353,9 @@ def scan_all_markets(all_odds, market_names):
     results = []
     for key, g in raw.items():
         bm_prices = g["bookmakers"]
-        if len(bm_prices) < MIN_BOOKS:
+        is_player_mkt = g.get("playerId", 0) != 0 or mid in PLAYER_MARKET_IDS
+        min_books = MIN_BOOKS_PLAYER if is_player_mkt else MIN_BOOKS_MATCH
+        if len(bm_prices) < min_books:
             continue
 
         avg = market_avg(bm_prices)
@@ -362,9 +365,21 @@ def scan_all_markets(all_odds, market_names):
 
         pct = pct_above_avg(best_price, avg)
         is_player = g["marketId"] in PLAYER_MARKET_IDS or g["playerId"] != 0
+
+        # Exclude correct score from match market comparison —
+        # prices vary too wildly across books to give meaningful averages
+        EXCLUDE_FROM_COMPARISON = {10336}
+        if g["marketId"] in EXCLUDE_FROM_COMPARISON:
+            continue
+
         # Match markets: only show if above average by MIN_EDGE_PCT
         # Player markets: show everything (even pct=0) so all lines visible
         if not is_player and pct < MIN_EDGE_PCT:
+            continue
+
+        # Sanity check: if best price is more than 3x the average,
+        # this is likely a data error or wildly illiquid market — skip it
+        if best_price > avg * 3:
             continue
 
         # Build outcome label

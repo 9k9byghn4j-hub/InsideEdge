@@ -158,13 +158,11 @@ def t_score(t):
     return ((t.get("upcomingFixtures") or 0) +
             (t.get("futureFixtures")   or 0) +
             (t.get("liveFixtures")     or 0))
+# Only use pinned tournaments — no random leagues pulled in
 pinned = [t for t in tournaments if t.get("tournamentId") in D.PINNED_TOURNAMENT_IDS]
-others = sorted([t for t in tournaments
-                 if t.get("tournamentId") not in D.PINNED_TOURNAMENT_IDS],
-                key=t_score, reverse=True)
 
 fixtures, seen_ids = [], set()
-for t in (pinned + others)[:8]:
+for t in pinned:
     tid = t.get("tournamentId")
     if tid:
         for fx in get_fixtures(tid):
