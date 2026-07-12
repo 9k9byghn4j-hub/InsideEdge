@@ -8,6 +8,12 @@ CSS_STYLE = """
 html,body,[class*="css"]{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e8e8f0}
 .stApp{background:#0a0a0f}
 #MainMenu,footer,header{visibility:hidden}
+/* The sidebar expand/collapse toggle lives inside <header> — visibility is
+   inherited, so hiding the header also hides it, leaving no way to reopen
+   the sidebar once collapsed (localStorage remembers collapse state across
+   visits, so this isn't just a first-load issue). Force it back on. */
+header [data-testid="stExpandSidebarButton"],
+header [data-testid="stSidebarCollapseButton"]{visibility:visible}
 .block-container{padding:1rem 1.5rem 2rem 1.5rem;max-width:100%}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e1e2e;padding-bottom:.75rem;margin-bottom:1.25rem}
@@ -102,8 +108,14 @@ STICKMAN_HTML = """
 
 
 def setup_page(page_title="InsideEdge"):
+    # The header (hidden below, for a clean custom look) is where Streamlit's
+    # sidebar collapse/expand toggle lives in modern versions — hiding it
+    # while defaulting to a collapsed sidebar makes the sidebar nav
+    # (Scanner/Terminal/Arbitrage) completely inaccessible. Default to
+    # expanded instead; there's no way to re-collapse it without the header
+    # toggle, which is exactly what we want for permanent page navigation.
     st.set_page_config(page_title=page_title, page_icon="⚡", layout="wide",
-                        initial_sidebar_state="collapsed")
+                        initial_sidebar_state="expanded")
     D.API_KEY = st.secrets.get("ODDSPAPI_KEY", "")
     st.markdown(CSS_STYLE, unsafe_allow_html=True)
 
