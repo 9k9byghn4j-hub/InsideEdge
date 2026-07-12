@@ -64,15 +64,22 @@ OUTCOME_LABELS = {
     101908: "Draw / Home", 101909: "Draw / Draw", 101910: "Draw / Away",
     101911: "Away / Home", 101912: "Away / Draw", 101913: "Away / Away",
 
-    # Correct Score — mapped from observed price patterns (France v Spain)
-    # Home wins
-    10336: "1-0",  10337: "0-0",  10338: "2-0",  10339: "2-1",
-    10340: "3-0",  10341: "3-1",  10342: "3-2",  10343: "4-0",
-    # Away wins
-    10345: "0-1",  10346: "1-1",  10347: "0-2",  10348: "1-2",
-    10349: "0-3",  10350: "0-4",  10354: "2-2",  10355: "1-3",
-    10356: "2-3",  10357: "1-4",  10358: "2-4",
-    10363: "3-3",  10364: "3-4",  10365: "4-4",  10372: "Other",
+    # Correct Score — block structure confirmed from multi-bookmaker price analysis
+    # Home wins block (10336-10343)
+    10336: "1-0",  10337: "2-0",  10338: "2-1",  10339: "3-0",
+    10340: "3-1",  10341: "3-2",  10342: "4-0",  10343: "4-1",
+    # Draws block (10344-10351)
+    10344: "0-0",  10345: "1-1",  10346: "2-2",  10347: "3-3",
+    10348: "4-4",  10349: "5-5",  10350: "6-6",  10351: "7-7",
+    # Away wins block (10352-10359)
+    10352: "0-1",  10353: "0-2",  10354: "1-2",  10355: "0-3",
+    10356: "1-3",  10357: "2-3",  10358: "0-4",  10359: "1-4",
+    # Higher scores (10360+)
+    10360: "2-4",  10361: "3-4",  10362: "4-3",
+    10363: "4-2",  10364: "5-0",  10365: "0-5",
+    10368: "5-1",  10369: "1-5",  10370: "5-2",  10371: "2-5",
+    10372: "Other Score",
+    10377: "6-0",  10378: "0-6",
 
     # Over/Under Goals
     106: "Over 0.5 Goals",  107: "Under 0.5 Goals",
@@ -367,7 +374,11 @@ def scan_all_markets(all_odds, market_names):
         mkt = g["marketName"]
 
         # Use known outcome labels where available
-        outcome_label = OUTCOME_LABELS.get(oid) or PLAYER_LINE_LABELS.get(oid) or mkt
+        if g["marketId"] == 10336:
+            # Correct score — don't guess labels, show TBC until confirmed from OddsPapi
+            outcome_label = f"Score (ID {oid})"
+        else:
+            outcome_label = OUTCOME_LABELS.get(oid) or PLAYER_LINE_LABELS.get(oid) or mkt
         if hcp is not None and str(hcp) not in outcome_label:
             outcome_label += f" {hcp}"
 
