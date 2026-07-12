@@ -132,18 +132,25 @@ def get_player_names(pids_tuple):
     return D.fetch_player_names(list(pids_tuple))
 
 # ── Sport filter ───────────────────────────────────────────────────────────────
-s1, s2 = st.columns([3, 0.7])
-with s1:
+# ── Top controls ──────────────────────────────────────────────────────────────
+c1, c2, c3 = st.columns([3, 1, 1])
+with c1:
     sport_label = st.selectbox("Sport", list(D.SPORTS.keys()),
                                label_visibility="collapsed")
-with s2:
+with c2:
     st.write("")
-    if st.button("↻ Refresh"):
-        st.cache_data.clear()
-        st.session_state.expanded = None
-        st.rerun()
+    refresh_clicked = st.button("↻ Refresh Odds", use_container_width=True)
+with c3:
+    st.write("")
+    apply_clicked = st.button("✓ Apply Filters", use_container_width=True)
 
 sport_id = D.SPORTS[sport_label]
+
+if refresh_clicked:
+    st.cache_data.clear()
+    st.session_state.expanded = None
+    st.session_state.pop("filtered_opps", None)
+    st.rerun()
 
 # ── Load fixtures ──────────────────────────────────────────────────────────────
 loading = st.empty()
@@ -271,11 +278,8 @@ scan_ph.markdown(STICKMAN_HTML, unsafe_allow_html=True)
 all_opportunities = build_opportunities(scan_fixtures)
 scan_ph.empty()
 
-# ── Secondary filters ──────────────────────────────────────────────────────────
-# Separate player props from match markets
-player_opps = [o for o in all_opportunities if o.get("is_player")]
-match_opps  = [o for o in all_opportunities if not o.get("is_player")]
-
+# ── Filters — applied only on button click ─────────────────────────────────────
+st.markdown('<div class="section-label">Filters</div>', unsafe_allow_html=True)
 f1, f2, f3, f4 = st.columns([2, 2, 1.5, 1.5])
 with f1:
     mkt_opts = ["All Markets"] + sorted({o["market"] for o in all_opportunities})
@@ -286,7 +290,6 @@ with f2:
                             default=[], placeholder="All bookmakers",
                             label_visibility="collapsed")
 with f3:
-    # Line filter — relevant for player props
     line_opts = ["All Lines", "Over 0.5", "Over 1.5", "Over 2.5", "Over 3.5", "Over 4.5"]
     sel_line = st.selectbox("Line", line_opts, label_visibility="collapsed")
 with f4:
@@ -296,19 +299,39 @@ with f4:
     lo = float(odds_raw[0])
     hi = float("inf") if odds_raw[1] == "∞" else float(odds_raw[1])
 
-def apply_filters(opps):
-    return [
-        o for o in opps
-        if (sel_market == "All Markets" or o["market"] == sel_market)
-        and (not sel_bm or o["best_bm"] in sel_bm)
-        and lo <= o["best_price"] <= hi
-        and (sel_line == "All Lines" or o["outcome"].startswith(sel_line)
-             or sel_line in o["outcome"])
-    ]
+# Only filter when Apply Filters clicked — store in session state
+if apply_clicked:
+    def _filter(opps):
+        return [
+            o for o in opps
+            if (sel_market == "All Markets" or o["market"] == sel_market)
+            and (not sel_bm or o["best_bm"] in sel_bm)
+            and lo <= o["best_price"] <= hi
+            and (sel_line == "All Lines"
+                 or sel_line in o["outcome"]
+                 or o["outcome"].startswith(sel_line))
+        ]
+    st.session_state["filtered_opps"] = _filter(all_opportunities)
+    st.session_state["filter_desc"] = (
+        f"Market: {sel_market}  ·  "
+        f"Bookmakers: {', '.join(D.bm_label(b) for b in sel_bm) if sel_bm else 'All'}  ·  "
+        f"Line: {sel_line}  ·  "
+        f"Odds: {lo}–{'∞' if hi == float('inf') else hi}"
+    )
 
-opportunities      = apply_filters(all_opportunities)
-match_opps_f       = apply_filters(match_opps)
-player_opps_f      = apply_filters(player_opps)
+# Use filtered results if available, else show all
+if "filtered_opps" in st.session_state:
+    opportunities = st.session_state["filtered_opps"]
+    if "filter_desc" in st.session_state:
+        st.markdown(
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.65rem;'
+            f'color:#5a5a7a;margin-bottom:0.75rem">Filtered: {st.session_state["filter_desc"]}</div>',
+            unsafe_allow_html=True)
+else:
+    opportunities = all_opportunities
+
+match_opps_f  = [o for o in opportunities if not o.get("is_player")]
+player_opps_f = [o for o in opportunities if o.get("is_player")]
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
 m1, m2, m3, m4 = st.columns(4)
