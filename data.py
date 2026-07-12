@@ -170,6 +170,28 @@ def pct_above_avg(price, avg):
         return 0
     return ((price - avg) / avg) * 100
 
+def substitute_team_names(label, home, away):
+    """Replace generic Home/Away/HT placeholders in an outcome label with
+    real team names. Plain FTR labels ("Home"/"Draw"/"Away") and BTTS/O-U
+    labels are left as-is — team context is already shown alongside them."""
+    return (label
+        .replace("Home (DNB)",  f"{home} (DNB)")
+        .replace("Away (DNB)",  f"{away} (DNB)")
+        .replace("Home or Draw",f"{home} or Draw")
+        .replace("Draw or Away",f"Draw or {away}")
+        .replace("Home or Away",f"{home} or {away}")
+        .replace("HT Home",     f"HT {home}")
+        .replace("HT Away",     f"HT {away}")
+        .replace("Home/Home",   f"{home}/{home}")
+        .replace("Home/Draw",   f"{home}/Draw")
+        .replace("Home/Away",   f"{home}/{away}")
+        .replace("Draw/Home",   f"Draw/{home}")
+        .replace("Draw/Away",   f"Draw/{away}")
+        .replace("Away/Home",   f"{away}/{home}")
+        .replace("Away/Draw",   f"{away}/Draw")
+        .replace("Away/Away",   f"{away}/{away}")
+    )
+
 # ── API ────────────────────────────────────────────────────────────────────────
 
 def _get(endpoint, params, retries=3):
@@ -278,11 +300,13 @@ def _fmt_name(raw):
 
 # ── Scanner ────────────────────────────────────────────────────────────────────
 
-def scan_all_markets(all_odds):
+def scan_all_markets(all_odds, min_edge_pct=1.0):
     """Scan all odds, only process markets defined in MARKET_CONFIG.
     Returns list of result dicts, one per unique (marketId, outcomeId, playerId, handicap).
+    Pass min_edge_pct=0 to return every outcome regardless of edge vs. average
+    (e.g. for a full price-matrix view rather than an opportunity feed).
     """
-    MIN_EDGE_PCT     = 1.0
+    MIN_EDGE_PCT     = min_edge_pct
     MIN_BOOKS_MATCH  = 4
     MIN_BOOKS_PLAYER = 2
     MAX_PRICE_RATIO  = 3.0  # skip if best > avg * this (data error / illiquid)
