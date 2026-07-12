@@ -234,6 +234,7 @@ def build_opportunities(scan_fixtures):
                 "avg_odds":   g["avg_odds"],
                 "pct_above":  g["pct_above"],
                 "bookmakers": g["bookmakers"],
+                "is_player":  g.get("playerId", 0) != 0 or g["marketId"] in D.PLAYER_MARKET_IDS,
             })
 
     return sorted(opps, key=lambda x: x["pct_above"], reverse=True)
@@ -244,7 +245,11 @@ all_opportunities = build_opportunities(scan_fixtures)
 scan_ph.empty()
 
 # ── Secondary filters ──────────────────────────────────────────────────────────
-f1, f2, f3 = st.columns([2, 2.5, 1.8])
+# Separate player props from match markets
+player_opps = [o for o in all_opportunities if o.get("is_player")]
+match_opps  = [o for o in all_opportunities if not o.get("is_player")]
+
+f1, f2, f3, f4 = st.columns([2, 2, 1.5, 1.5])
 with f1:
     mkt_opts = ["All Markets"] + sorted({o["market"] for o in all_opportunities})
     sel_market = st.selectbox("Market", mkt_opts, label_visibility="collapsed")
@@ -254,27 +259,97 @@ with f2:
                             default=[], placeholder="All bookmakers",
                             label_visibility="collapsed")
 with f3:
+    # Line filter — relevant for player props
+    line_opts = ["All Lines", "Over 0.5", "Over 1.5", "Over 2.5", "Over 3.5", "Over 4.5"]
+    sel_line = st.selectbox("Line", line_opts, label_visibility="collapsed")
+with f4:
     odds_opts = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 30, 50, "∞"]
     odds_raw = st.select_slider("Odds", options=odds_opts, value=(1, "∞"),
                                 label_visibility="collapsed")
     lo = float(odds_raw[0])
     hi = float("inf") if odds_raw[1] == "∞" else float(odds_raw[1])
 
-opportunities = [
-    o for o in all_opportunities
-    if (sel_market == "All Markets" or o["market"] == sel_market)
-    and (not sel_bm or o["best_bm"] in sel_bm)
-    and lo <= o["best_price"] <= hi
-]
+def apply_filters(opps):
+    return [
+        o for o in opps
+        if (sel_market == "All Markets" or o["market"] == sel_market)
+        and (not sel_bm or o["best_bm"] in sel_bm)
+        and lo <= o["best_price"] <= hi
+        and (sel_line == "All Lines" or sel_line.lower() in o["outcome"].lower())
+    ]
+
+opportunities      = apply_filters(all_opportunities)
+match_opps_f       = apply_filters(match_opps)
+player_opps_f      = apply_filters(player_opps)
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
 m1, m2, m3, m4 = st.columns(4)
 with m1: st.metric("Fixtures Scanned", len(scan_fixtures))
-with m2: st.metric("Best Prices Found", len(opportunities))
-with m3: st.metric("Best Edge", f"+{opportunities[0]['pct_above']:.1f}%" if opportunities else "—")
-with m4: st.metric("Markets", len({o["market"] for o in all_opportunities}))
+with m2: st.metric("Match Edges", len(match_opps_f))
+with m3: st.metric("Player Props", len(player_opps_f))
+with m4: st.metric("Best Edge", f"+{opportunities[0]['pct_above']:.1f}%" if opportunities else "—")
 
 st.write("")
+
+# ── Card render function ──────────────────────────────────────────────────────
+def _render_card(opp, card_id):
+    is_exp    = st.session_state.expanded == card_id
+    bar_width = min(opp["pct_above"] * 4, 100)
+
+    st.markdown(f"""
+    <div class="pc">
+        <div class="pc-accent"></div>
+        <div class="pc-top">
+            <div>
+                <div class="pc-match">{opp['match']}</div>
+                <div class="pc-meta">{opp['start']} &nbsp;·&nbsp;
+                    <span class="mkt-tag">{opp['market']}</span></div>
+            </div>
+            <div>
+                <div class="pc-edge">{f"+{opp['pct_above']:.1f}%" if opp['pct_above'] >= 1 else "—"}</div>
+                <div class="pc-edge-sub">vs market avg</div>
+            </div>
+        </div>
+        <div class="pc-bottom">
+            <span class="outcome-tag">{opp['outcome']}</span>
+            <span class="bookie-tag">{D.bm_label(opp['best_bm'])}</span>
+            <span class="odds-tag">{opp['best_price']:.2f}</span>
+            <span class="avg-tag">avg {opp['avg_odds']:.2f}</span>
+        </div>
+        <div class="ev-bar-wrap">
+            <div class="ev-bar-fill" style="width:{bar_width}%"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    btn = "▲ Hide prices" if is_exp else "▼ All bookmaker prices"
+    if st.button(btn, key=f"btn_{card_id}"):
+        st.session_state.expanded = None if is_exp else card_id
+        st.rerun()
+
+    if is_exp:
+        avg    = opp["avg_odds"]
+        ranked = D.all_odds_ranked(opp["bookmakers"])
+        best_p = ranked[0][1] if ranked else 0
+        rows   = ""
+        for bm, price in ranked:
+            od_cls = "bm-odds-best" if price == best_p else "bm-odds"
+            pct    = D.pct_above_avg(price, avg)
+            if pct >= 0:
+                diff_str, diff_cls = f"+{pct:.1f}%", "bm-above"
+            else:
+                diff_str, diff_cls = f"{pct:.1f}%", "bm-below"
+            rows += (f'<div class="bm-row"><span class="bm-name">{D.bm_label(bm)}</span>'
+                     f'<span class="{od_cls}">{price:.2f}</span>'
+                     f'<span class="{diff_cls}">{diff_str}</span></div>')
+        st.markdown(f"""
+        <div class="xp-card">
+            <div class="xp-title">{opp['outcome']} — {opp['match']}</div>
+            <div style="margin-bottom:.5rem;font-family:'JetBrains Mono',monospace;
+                 font-size:.65rem;color:#5a5a7a">Market average: {avg:.2f}</div>
+            {rows}
+        </div>
+        """, unsafe_allow_html=True)
 
 # ── Coverage expander ──────────────────────────────────────────────────────────
 with st.expander("🔍 Bookmaker coverage", expanded=False):
@@ -302,13 +377,32 @@ with st.expander("🔍 Bookmaker coverage", expanded=False):
             unsafe_allow_html=True)
 
 # ── Price feed ─────────────────────────────────────────────────────────────────
-st.markdown('<div class="section-label">Best Prices Right Now</div>',
+# ── Match market feed ─────────────────────────────────────────────────────────
+st.markdown('<div class="section-label">Best Prices — Match Markets</div>',
             unsafe_allow_html=True)
 
-if not opportunities:
-    st.markdown('<div class="no-data">No best prices found matching your filters.</div>',
+if not match_opps_f:
+    st.markdown('<div class="no-data">No match market edges found.</div>',
                 unsafe_allow_html=True)
 else:
+    for idx, opp in enumerate(match_opps_f[:10]):
+        _render_card(opp, f"m_{idx}")
+
+st.write("")
+
+# ── Player props feed ──────────────────────────────────────────────────────────
+st.markdown('<div class="section-label">Player Props</div>',
+            unsafe_allow_html=True)
+
+if not player_opps_f:
+    st.markdown('<div class="no-data">No player props found for these filters.</div>',
+                unsafe_allow_html=True)
+else:
+    for idx, opp in enumerate(player_opps_f[:30]):
+        _render_card(opp, f"p_{idx}")
+
+# ── Dummy loop anchor (replaced above) ────────────────────────────────────────
+if False:
     for idx, opp in enumerate(opportunities[:20]):
         card_id   = f"card_{idx}"
         is_exp    = st.session_state.expanded == card_id

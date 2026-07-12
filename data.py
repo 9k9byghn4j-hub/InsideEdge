@@ -230,16 +230,21 @@ def _fmt_name(raw):
 
 # ── Scanner ────────────────────────────────────────────────────────────────────
 
+# Player prop market IDs — these are shown in full regardless of edge
+PLAYER_MARKET_IDS = {
+    10730, 10731, 10732, 10733, 10738,
+    10743, 10753,
+    102590, 102606, 102624, 102626,
+    102659, 102700, 102706, 102716, 102732,
+}
+
 def scan_all_markets(all_odds, market_names):
     """Group every odd by (marketId, outcomeId, playerId, handicap).
-    For each group compute:
-      - bookmakers: {bm: price} for bettable books
-      - avg_odds:   market average across all bettable books
-      - best_price, best_bm: top price
-      - pct_above:  how much best price beats the average (%)
-    Only returns groups where best price is above average by MIN_EDGE%.
+    
+    Match markets: only return where best price is >= MIN_EDGE_PCT above average.
+    Player markets: return ALL entries regardless of edge (show every player/line).
     """
-    MIN_EDGE_PCT = 1.0   # minimum % above average to show
+    MIN_EDGE_PCT = 1.0   # minimum % above average for match markets
     MIN_BOOKS    = 2     # need at least 2 books to compare meaningfully
 
     raw = {}
@@ -281,7 +286,10 @@ def scan_all_markets(all_odds, market_names):
             continue
 
         pct = pct_above_avg(best_price, avg)
-        if pct < MIN_EDGE_PCT:
+        is_player = g["marketId"] in PLAYER_MARKET_IDS or g["playerId"] != 0
+        # Match markets: only show if above average by MIN_EDGE_PCT
+        # Player markets: show everything (even pct=0) so all lines visible
+        if not is_player and pct < MIN_EDGE_PCT:
             continue
 
         # Build outcome label
