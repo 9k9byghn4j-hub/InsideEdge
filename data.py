@@ -69,15 +69,25 @@ def all_odds_ranked(bm_price_dict):
 def true_prob_for_market(outcome_all_prices_list):
     """Given a list of {bm: price} dicts (one per outcome in a market),
     compute true probability for each outcome using the best available benchmark.
-    
-    Returns list of (true_prob, benchmark) in same order as input.
+
+    Key rules:
+    - Requires at least 2 outcomes in the market group before normalising.
+      Single-outcome groups would normalise to 100% — a nonsense result.
+    - True prob is capped at 0.95 to prevent degenerate EV on near-certainties.
+    - Returns list of (true_prob, benchmark) in same order as input.
     """
     n = len(outcome_all_prices_list)
     if n == 0:
         return []
 
+    # Require at least 2 outcomes for meaningful normalisation
+    # Single-outcome markets (e.g. one side of a handicap with no other side priced)
+    # cannot be reliably benchmarked — skip them
+    if n < 2:
+        return [(None, None)]
+
     # --- Try Betfair Exchange ---
-    # Need BF price for ALL outcomes; total implied 0.92–1.12 = liquid
+    # Need BF price for ALL outcomes; total implied 0.90–1.15 = liquid
     bf_implieds = []
     for prices in outcome_all_prices_list:
         bf_p = prices.get("betfair-ex") or prices.get("betfair-spb")
@@ -89,7 +99,7 @@ def true_prob_for_market(outcome_all_prices_list):
     if all(v is not None for v in bf_implieds):
         bf_total = sum(bf_implieds)
         if 0.90 <= bf_total <= 1.15:
-            return [(v / bf_total, "Betfair Ex") for v in bf_implieds]
+            return [(min(0.95, v / bf_total), "Betfair Ex") for v in bf_implieds]
 
     # --- Devigged median + market normalisation ---
     raw_medians = []
@@ -101,24 +111,28 @@ def true_prob_for_market(outcome_all_prices_list):
             book_counts.append(0)
             continue
         implieds = sorted(1/p for p in bm_p)
-        # Trim outliers if enough books
+        # Trim outliers when enough books
         if len(implieds) >= 6:
             implieds = implieds[1:-1]
         raw_medians.append(statistics.median(implieds))
         book_counts.append(len(bm_p))
 
-    if any(v is not None for v in raw_medians):
-        total = sum(v for v in raw_medians if v)
-        if total > 0:
-            results = []
-            for v, bc in zip(raw_medians, book_counts):
-                if v is not None:
-                    results.append((v / total, f"Devigged ({bc} books)"))
-                else:
-                    results.append((None, None))
-            return results
+    # Need at least 2 outcomes with actual prices to normalise meaningfully
+    priced_count = sum(1 for v in raw_medians if v is not None)
+    if priced_count < 2:
+        return [(None, None)] * n
 
-    return [(None, None)] * n
+    total = sum(v for v in raw_medians if v)
+    if total <= 0:
+        return [(None, None)] * n
+
+    results = []
+    for v, bc in zip(raw_medians, book_counts):
+        if v is not None:
+            results.append((min(0.95, v / total), f"Devigged ({bc} books)"))
+        else:
+            results.append((None, None))
+    return results
 
 # ── API ────────────────────────────────────────────────────────────────────────
 
