@@ -1,12 +1,11 @@
 import requests
-import math
 import statistics
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-API_KEY  = ""
-BASE     = "https://v5.oddspapi.io/en"
+API_KEY = ""
+BASE    = "https://v5.oddspapi.io/en"
 
 ALL_BOOKMAKERS = [
     "bet365", "betfair-ex", "betway", "boylesports", "bwin",
@@ -17,8 +16,8 @@ ALL_BOOKMAKERS = [
     "888sport", "32red",
 ]
 
-EXCHANGE_BOOKS    = {"betfair-ex", "betfair-spb"}
-EXCLUDED_FROM_EV  = {"betfair-ex", "betfair-spb"}
+EXCHANGE_BOOKS   = {"betfair-ex", "betfair-spb"}
+EXCLUDED_FROM_BM = {"betfair-ex", "betfair-spb"}  # don't compare vs exchanges
 
 BOOKMAKER_LABELS = {
     "32red": "32Red", "888sport": "888sport", "allbritishcasino": "AllBritish",
@@ -34,12 +33,32 @@ BOOKMAKER_LABELS = {
 
 SPORTS = {
     "⚽  Football": 10,
-    "⛳  Golf":     2,
-    "🏏  Cricket":  7,
+    "⛳  Golf":      2,
+    "🏏  Cricket":   7,
 }
 
-# Tournament IDs always fetched first for football
 PINNED_TOURNAMENT_IDS = {16, 17, 132}  # World Cup, EPL, UCL
+
+# ── Outcome line labels ─────────────────────────────────────────────────────────
+# Maps outcomeId → human-readable label for over/under player markets
+PLAYER_LINE_LABELS = {
+    # Shots (marketId 10743)
+    10744: "Over 0.5 Shots", 10745: "Over 1.5 Shots", 10746: "Over 2.5 Shots",
+    10747: "Over 3.5 Shots", 10748: "Over 4.5 Shots",
+    # Shots on Target (marketId 10753)
+    10754: "Over 0.5 SoT",   10755: "Over 1.5 SoT",   10756: "Over 2.5 SoT",
+    # Fouls (marketId 102700)
+    102701: "Over 0.5 Fouls", 102702: "Over 1.5 Fouls", 102703: "Over 2.5 Fouls",
+    # Cards (marketId 102732)
+    102733: "Over 0.5 Cards", 102734: "Over 1.5 Cards",
+    # Goals (various over/under goal markets share outcome patterns)
+    106: "Over 0.5 Goals", 107: "Under 0.5 Goals",
+    108: "Over 1.5 Goals", 109: "Under 1.5 Goals",
+    1010: "Over 2.5 Goals", 1011: "Under 2.5 Goals",
+    1012: "Over 3.5 Goals", 1013: "Under 3.5 Goals",
+    1014: "Over 4.5 Goals", 1015: "Under 4.5 Goals",
+    1016: "Over 5.5 Goals", 1017: "Under 5.5 Goals",
+}
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -52,9 +71,6 @@ def fmt_time(unix_ts):
     except Exception:
         return "—"
 
-def calc_ev(true_prob, bm_odds):
-    return (true_prob * bm_odds) - 1
-
 def best_odds(bm_price_dict):
     if not bm_price_dict:
         return None, None
@@ -64,75 +80,16 @@ def best_odds(bm_price_dict):
 def all_odds_ranked(bm_price_dict):
     return sorted(bm_price_dict.items(), key=lambda x: x[1], reverse=True)
 
-# ── True probability ───────────────────────────────────────────────────────────
+def market_avg(bm_price_dict):
+    """Average odds across all bookmakers — used for comparison."""
+    prices = [p for p in bm_price_dict.values() if p and p > 1]
+    return sum(prices) / len(prices) if prices else None
 
-def true_prob_for_market(outcome_all_prices_list):
-    """Given a list of {bm: price} dicts (one per outcome in a market),
-    compute true probability for each outcome using the best available benchmark.
-
-    Key rules:
-    - Requires at least 2 outcomes in the market group before normalising.
-      Single-outcome groups would normalise to 100% — a nonsense result.
-    - True prob is capped at 0.95 to prevent degenerate EV on near-certainties.
-    - Returns list of (true_prob, benchmark) in same order as input.
-    """
-    n = len(outcome_all_prices_list)
-    if n == 0:
-        return []
-
-    # Require at least 2 outcomes for meaningful normalisation
-    # Single-outcome markets (e.g. one side of a handicap with no other side priced)
-    # cannot be reliably benchmarked — skip them
-    if n < 2:
-        return [(None, None)]
-
-    # --- Try Betfair Exchange ---
-    # Need BF price for ALL outcomes; total implied 0.90–1.15 = liquid
-    bf_implieds = []
-    for prices in outcome_all_prices_list:
-        bf_p = prices.get("betfair-ex") or prices.get("betfair-spb")
-        if bf_p and bf_p > 1:
-            bf_implieds.append(1 / bf_p)
-        else:
-            bf_implieds.append(None)
-
-    if all(v is not None for v in bf_implieds):
-        bf_total = sum(bf_implieds)
-        if 0.90 <= bf_total <= 1.15:
-            return [(min(0.95, v / bf_total), "Betfair Ex") for v in bf_implieds]
-
-    # --- Devigged median + market normalisation ---
-    raw_medians = []
-    book_counts = []
-    for prices in outcome_all_prices_list:
-        bm_p = [p for bm, p in prices.items() if bm not in EXCHANGE_BOOKS and p and p > 1]
-        if not bm_p:
-            raw_medians.append(None)
-            book_counts.append(0)
-            continue
-        implieds = sorted(1/p for p in bm_p)
-        # Trim outliers when enough books
-        if len(implieds) >= 6:
-            implieds = implieds[1:-1]
-        raw_medians.append(statistics.median(implieds))
-        book_counts.append(len(bm_p))
-
-    # Need at least 2 outcomes with actual prices to normalise meaningfully
-    priced_count = sum(1 for v in raw_medians if v is not None)
-    if priced_count < 2:
-        return [(None, None)] * n
-
-    total = sum(v for v in raw_medians if v)
-    if total <= 0:
-        return [(None, None)] * n
-
-    results = []
-    for v, bc in zip(raw_medians, book_counts):
-        if v is not None:
-            results.append((min(0.95, v / total), f"Devigged ({bc} books)"))
-        else:
-            results.append((None, None))
-    return results
+def pct_above_avg(price, avg):
+    """How much above the market average is this price, as a percentage."""
+    if not avg or avg <= 0:
+        return 0
+    return ((price - avg) / avg) * 100
 
 # ── API ────────────────────────────────────────────────────────────────────────
 
@@ -162,7 +119,8 @@ def fetch_tournaments(sport_id):
 def fetch_market_names(sport_id):
     data = _get("markets", {"sportId": sport_id})
     if isinstance(data, list):
-        return {m.get("marketId"): m.get("marketName") for m in data if m.get("marketId")}
+        return {m.get("marketId"): m.get("marketName")
+                for m in data if m.get("marketId")}
     return {}
 
 def fetch_fixtures(tournament_id):
@@ -190,7 +148,7 @@ def fetch_fixtures(tournament_id):
     return fixtures
 
 def fetch_fixture_odds(fixture_id):
-    """Fetch all odds concurrently across all bookmakers."""
+    """Fetch all odds concurrently across all bookmaker chunks."""
     all_odds = {}
     chunks = [ALL_BOOKMAKERS[i:i+5] for i in range(0, len(ALL_BOOKMAKERS), 5)]
 
@@ -213,7 +171,6 @@ def fetch_fixture_odds(fixture_id):
     return all_odds
 
 def fetch_player_names(player_ids):
-    """Fetch player names via /players?playerIds=... endpoint."""
     if not player_ids:
         return {}
     names = {}
@@ -226,23 +183,29 @@ def fetch_player_names(player_ids):
                 pid = p.get("playerId")
                 raw = p.get("playerName", "")
                 if pid and raw:
-                    names[pid] = _fmt_player_name(raw)
+                    names[pid] = _fmt_name(raw)
     return names
 
-def _fmt_player_name(raw):
+def _fmt_name(raw):
     if "," in raw:
         surname, firstname = [s.strip() for s in raw.split(",", 1)]
         return f"{firstname[0]}. {surname}" if firstname else surname
     return raw
 
-# ── Generic market scanner ─────────────────────────────────────────────────────
+# ── Scanner ────────────────────────────────────────────────────────────────────
 
 def scan_all_markets(all_odds, market_names):
-    """Scan every odd, group by market+outcome+player+handicap, compute true probs
-    at market level with normalisation. Returns list of opportunity dicts."""
+    """Group every odd by (marketId, outcomeId, playerId, handicap).
+    For each group compute:
+      - bookmakers: {bm: price} for bettable books
+      - avg_odds:   market average across all bettable books
+      - best_price, best_bm: top price
+      - pct_above:  how much best price beats the average (%)
+    Only returns groups where best price is above average by MIN_EDGE%.
+    """
+    MIN_EDGE_PCT = 1.5   # minimum % above average to show
+    MIN_BOOKS    = 3     # need at least this many books to compare meaningfully
 
-    # Step 1: collect raw data per group
-    # key = (marketId, outcomeId, playerId, handicap)
     raw = {}
     for bm, bm_odds in all_odds.items():
         for odd_id, odd in bm_odds.items():
@@ -263,37 +226,49 @@ def scan_all_markets(all_odds, market_names):
                     "outcomeId":  oid,
                     "playerId":   pid,
                     "handicap":   hcp,
-                    "all_prices": {},
                     "bookmakers": {},
                 }
-            raw[key]["all_prices"][bm] = price
-            if bm not in EXCLUDED_FROM_EV:
+            if bm not in EXCLUDED_FROM_BM:
                 raw[key]["bookmakers"][bm] = price
 
-    # Step 2: group keys by market context
-    # For non-player markets: group by (marketId, handicap) — all outcomes of a market
-    # For player markets: group by (marketId, playerId) — all lines for one player+market
-    market_ctx = {}
-    for key, g in raw.items():
-        mid, oid, pid, hcp = key
-        if pid:
-            ctx = ("player", mid, pid)    # player: group by market+player
-        else:
-            ctx = ("market", mid, hcp)    # non-player: group by market+handicap
-        if ctx not in market_ctx:
-            market_ctx[ctx] = []
-        market_ctx[ctx].append(key)
-
-    # Step 3: compute true probs per market context
     results = []
-    for ctx, keys in market_ctx.items():
-        groups = [raw[k] for k in keys]
-        price_lists = [g["all_prices"] for g in groups]
-        probs = true_prob_for_market(price_lists)
+    for key, g in raw.items():
+        bm_prices = g["bookmakers"]
+        if len(bm_prices) < MIN_BOOKS:
+            continue
 
-        for g, (tp, bm_label_str) in zip(groups, probs):
-            g["true_prob"] = tp
-            g["benchmark"] = bm_label_str
-            results.append(g)
+        avg = market_avg(bm_prices)
+        best_price, best_bm = best_odds(bm_prices)
+        if not avg or not best_price:
+            continue
 
-    return results
+        pct = pct_above_avg(best_price, avg)
+        if pct < MIN_EDGE_PCT:
+            continue
+
+        # Build outcome label
+        oid = g["outcomeId"]
+        pid = g["playerId"]
+        hcp = g["handicap"]
+        mkt = g["marketName"]
+
+        # Use known line labels where available
+        outcome_label = PLAYER_LINE_LABELS.get(oid, mkt)
+        if hcp is not None and str(hcp) not in outcome_label:
+            outcome_label += f" {hcp}"
+
+        results.append({
+            "marketId":     g["marketId"],
+            "marketName":   mkt,
+            "outcomeId":    oid,
+            "playerId":     pid,
+            "handicap":     hcp,
+            "outcome_label": outcome_label,
+            "bookmakers":   bm_prices,
+            "avg_odds":     round(avg, 3),
+            "best_price":   best_price,
+            "best_bm":      best_bm,
+            "pct_above":    pct,
+        })
+
+    return sorted(results, key=lambda x: x["pct_above"], reverse=True)
