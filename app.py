@@ -119,10 +119,6 @@ if not D.API_KEY:
 def get_tournaments(sport_id):
     return D.fetch_tournaments(sport_id)
 
-@st.cache_data(ttl=3600)
-def get_market_names(sport_id):
-    return D.fetch_market_names(sport_id)
-
 @st.cache_data(ttl=120)
 def get_fixtures(tid):
     return D.fetch_fixtures(tid)
@@ -158,17 +154,26 @@ def t_score(t):
     return ((t.get("upcomingFixtures") or 0) +
             (t.get("futureFixtures")   or 0) +
             (t.get("liveFixtures")     or 0))
-# Only use pinned tournaments — no random leagues pulled in
-pinned = [t for t in tournaments if t.get("tournamentId") in D.PINNED_TOURNAMENT_IDS]
+# Try pinned tournaments first, then fall back to top tournaments by fixture count
+pinned_ids = D.PINNED_TOURNAMENT_IDS
+pinned = [t for t in tournaments if t.get("tournamentId") in pinned_ids]
+others = sorted(
+    [t for t in tournaments if t.get("tournamentId") not in pinned_ids],
+    key=lambda t: (t.get("upcomingFixtures") or 0) + (t.get("futureFixtures") or 0),
+    reverse=True
+)
 
 fixtures, seen_ids = [], set()
-for t in pinned:
+# Try pinned first, then top others until we have at least 5 fixtures
+for t in pinned + others[:10]:
     tid = t.get("tournamentId")
     if tid:
         for fx in get_fixtures(tid):
             if fx["fixtureId"] not in seen_ids:
                 fixtures.append(fx)
                 seen_ids.add(fx["fixtureId"])
+    if len(fixtures) >= 20:
+        break
 
 fixtures = sorted(fixtures, key=lambda f: f.get("start_ts", 0))
 loading.empty()
@@ -191,8 +196,6 @@ else:
     scan_fixtures = fixtures[:10]
 
 # ── Scan ──────────────────────────────────────────────────────────────────────
-market_names = get_market_names(sport_id)
-
 def build_opportunities(scan_fixtures):
     opps = []
     seen = set()
@@ -202,7 +205,7 @@ def build_opportunities(scan_fixtures):
         if not all_odds:
             continue
 
-        groups = D.scan_all_markets(all_odds, market_names)
+        groups = D.scan_all_markets(all_odds)
 
         # Batch fetch player names
         pids = {g["playerId"] for g in groups if g.get("playerId")}
@@ -217,27 +220,35 @@ def build_opportunities(scan_fixtures):
 
             # Build full outcome label
             outcome = g["outcome_label"]
+            mid = g["marketId"]
+
             if g.get("playerId"):
                 pname = names.get(g["playerId"], f"Player {g['playerId']}")
                 outcome = f"{pname} — {outcome}"
+
+            # For correct score, prefix with home team - away team context
+            if mid == 10336:
+                outcome = f"{fx['home']} {outcome} {fx['away']}"
+
             # Substitute real team names into generic labels
+            h, a = fx['home'], fx['away']
             outcome = (outcome
-                       .replace("Home (DNB)", f"{fx['home']} (DNB)")
-                       .replace("Away (DNB)", f"{fx['away']} (DNB)")
-                       .replace("Home or Draw", f"{fx['home']} or Draw")
-                       .replace("Draw or Away", f"Draw or {fx['away']}")
-                       .replace("Home or Away", f"{fx['home']} or {fx['away']}")
-                       .replace("HT Home", f"HT {fx['home']}")
-                       .replace("HT Away", f"HT {fx['away']}")
-                       .replace("Home / Home", f"{fx['home']} / {fx['home']}")
-                       .replace("Home / Draw", f"{fx['home']} / Draw")
-                       .replace("Home / Away", f"{fx['home']} / {fx['away']}")
-                       .replace("Draw / Home", f"Draw / {fx['home']}")
-                       .replace("Draw / Away", f"Draw / {fx['away']}")
-                       .replace("Away / Home", f"{fx['away']} / {fx['home']}")
-                       .replace("Away / Draw", f"{fx['away']} / Draw")
-                       .replace("Away / Away", f"{fx['away']} / {fx['away']}")
-                       )
+                .replace("Home (DNB)",  f"{h} (DNB)")
+                .replace("Away (DNB)",  f"{a} (DNB)")
+                .replace("Home or Draw",f"{h} or Draw")
+                .replace("Draw or Away",f"Draw or {a}")
+                .replace("Home or Away",f"{h} or {a}")
+                .replace("HT Home",     f"HT {h}")
+                .replace("HT Away",     f"HT {a}")
+                .replace("Home/Home",   f"{h}/{h}")
+                .replace("Home/Draw",   f"{h}/Draw")
+                .replace("Home/Away",   f"{h}/{a}")
+                .replace("Draw/Home",   f"Draw/{h}")
+                .replace("Draw/Away",   f"Draw/{a}")
+                .replace("Away/Home",   f"{a}/{h}")
+                .replace("Away/Draw",   f"{a}/Draw")
+                .replace("Away/Away",   f"{a}/{a}")
+            )
 
             opps.append({
                 "fixtureId":  fx["fixtureId"],
@@ -291,7 +302,8 @@ def apply_filters(opps):
         if (sel_market == "All Markets" or o["market"] == sel_market)
         and (not sel_bm or o["best_bm"] in sel_bm)
         and lo <= o["best_price"] <= hi
-        and (sel_line == "All Lines" or sel_line.lower() in o["outcome"].lower())
+        and (sel_line == "All Lines" or o["outcome"].startswith(sel_line)
+             or sel_line in o["outcome"])
     ]
 
 opportunities      = apply_filters(all_opportunities)

@@ -17,7 +17,7 @@ ALL_BOOKMAKERS = [
 ]
 
 EXCHANGE_BOOKS   = {"betfair-ex", "betfair-spb"}
-EXCLUDED_FROM_BM = {"betfair-ex", "betfair-spb"}  # don't compare vs exchanges
+EXCLUDED_FROM_BM = {"betfair-ex", "betfair-spb"}
 
 BOOKMAKER_LABELS = {
     "32red": "32Red", "888sport": "888sport", "allbritishcasino": "AllBritish",
@@ -37,138 +37,108 @@ SPORTS = {
     "🏏  Cricket":   7,
 }
 
-PINNED_TOURNAMENT_IDS = {16, 17, 132}  # World Cup, EPL, UCL
+# Tournaments to always try — add more IDs here as needed
+PINNED_TOURNAMENT_IDS = {16, 17, 132, 8, 35, 6}  # WC, EPL, UCL, La Liga, Bundesliga, Serie A
 
-# ── Outcome labels ────────────────────────────────────────────────────────────
-# Maps outcomeId → human-readable label
-# Correct score: IDs follow blocks — home wins 10336-10343, draws 10344-10346,
-# away wins 10345+ (overlapping blocks by score group)
+# ── Market definitions ─────────────────────────────────────────────────────────
+# Markets we show and how to label them
+# key = marketId, value = (display_name, is_player_market, exclude_from_comparison)
+MARKET_CONFIG = {
+    101:    ("Full Time Result",      False, False),
+    104:    ("Both Teams to Score",   False, False),
+    106:    ("Over/Under Goals",      False, False),
+    108:    ("Over/Under Goals",      False, False),
+    1010:   ("Over/Under Goals",      False, False),
+    1012:   ("Over/Under Goals",      False, False),
+    1014:   ("Over/Under Goals",      False, False),
+    1016:   ("Over/Under Goals",      False, False),
+    10168:  ("Double Chance",         False, False),
+    10214:  ("Draw No Bet",           False, False),
+    10799:  ("Half Time Result",      False, False),
+    101905: ("Half Time / Full Time", False, False),
+    10336:  ("Correct Score",         False, True),   # excluded from comparison — prices too varied
+    10730:  ("Anytime Goalscorer",    True,  False),
+    10731:  ("First Goalscorer",      True,  False),
+    10732:  ("Last Goalscorer",       True,  False),
+    10733:  ("Score 2+ Goals",        True,  False),
+    10738:  ("Score Outside Box",     True,  False),
+    10743:  ("Player Shots",          True,  False),
+    10753:  ("Player Shots on Target",True,  False),
+    102590: ("Goalkeeper Saves",      True,  False),
+    102606: ("Player Assists",        True,  False),
+    102624: ("Player Shots on Target",True,  False),
+    102626: ("Player Shots",          True,  False),
+    102659: ("Player Tackles",        True,  False),
+    102700: ("Player Fouls Committed",True,  False),
+    102706: ("Player Fouls Won",      True,  False),
+    102716: ("Player Passes",         True,  False),
+    102732: ("Player Cards",          True,  False),
+}
+
+# outcomeId → label (confirmed from price analysis + OddsPapi structure)
 OUTCOME_LABELS = {
     # Full Time Result
     101: "Home", 102: "Draw", 103: "Away",
-
-    # Both Teams to Score
+    # BTTS
     104: "Yes", 105: "No",
-
-    # Draw No Bet — labels substituted with team names at runtime
+    # Draw No Bet (team names substituted at runtime)
     10214: "Home (DNB)", 10215: "Away (DNB)",
-
-    # Double Chance
+    # Double Chance (team names substituted at runtime)
     10168: "Home or Draw", 10169: "Draw or Away", 10170: "Home or Away",
-
-    # Half Time Result
+    # Half Time Result (team names substituted at runtime)
     10799: "HT Home", 10800: "HT Draw", 10801: "HT Away",
-
-    # HT/FT
-    101905: "Home / Home", 101906: "Home / Draw", 101907: "Home / Away",
-    101908: "Draw / Home", 101909: "Draw / Draw", 101910: "Draw / Away",
-    101911: "Away / Home", 101912: "Away / Draw", 101913: "Away / Away",
-
-    # Correct Score — block structure confirmed from multi-bookmaker price analysis
-    # Home wins block (10336-10343)
-    10336: "1-0",  10337: "2-0",  10338: "2-1",  10339: "3-0",
-    10340: "3-1",  10341: "3-2",  10342: "4-0",  10343: "4-1",
-    # Draws block (10344-10351)
-    10344: "0-0",  10345: "1-1",  10346: "2-2",  10347: "3-3",
-    10348: "4-4",  10349: "5-5",  10350: "6-6",  10351: "7-7",
-    # Away wins block (10352-10359)
-    10352: "0-1",  10353: "0-2",  10354: "1-2",  10355: "0-3",
-    10356: "1-3",  10357: "2-3",  10358: "0-4",  10359: "1-4",
-    # Higher scores (10360+)
-    10360: "2-4",  10361: "3-4",  10362: "4-3",
-    10363: "4-2",  10364: "5-0",  10365: "0-5",
-    10368: "5-1",  10369: "1-5",  10370: "5-2",  10371: "2-5",
-    10372: "Other Score",
-    10377: "6-0",  10378: "0-6",
-
+    # HT/FT (team names substituted at runtime)
+    101905: "Home/Home", 101906: "Home/Draw", 101907: "Home/Away",
+    101908: "Draw/Home", 101909: "Draw/Draw", 101910: "Draw/Away",
+    101911: "Away/Home", 101912: "Away/Draw", 101913: "Away/Away",
     # Over/Under Goals
-    106: "Over 0.5 Goals",  107: "Under 0.5 Goals",
-    108: "Over 1.5 Goals",  109: "Under 1.5 Goals",
-    1010: "Over 2.5 Goals", 1011: "Under 2.5 Goals",
-    1012: "Over 3.5 Goals", 1013: "Under 3.5 Goals",
-    1014: "Over 4.5 Goals", 1015: "Under 4.5 Goals",
-    1016: "Over 5.5 Goals", 1017: "Under 5.5 Goals",
-
-    # Player Shots (marketId 10743)
-    10744: "Over 0.5 Shots", 10745: "Over 1.5 Shots", 10746: "Over 2.5 Shots",
-    10747: "Over 3.5 Shots", 10748: "Over 4.5 Shots",
-    # Player Shots on Target (marketId 10753)
-    10754: "Over 0.5 SoT",   10755: "Over 1.5 SoT",   10756: "Over 2.5 SoT",
-    # Player Fouls Committed (marketId 102700)
-    102701: "Over 0.5 Fouls", 102702: "Over 1.5 Fouls", 102703: "Over 2.5 Fouls",
-    # Player Cards (marketId 102732)
-    102733: "Over 0.5 Cards", 102734: "Over 1.5 Cards",
-    # Player Tackles (marketId 102659)
-    102660: "Over 0.5 Tackles", 102661: "Over 1.5 Tackles", 102662: "Over 2.5 Tackles",
-    # Goalkeeper Saves (marketId 102590)
-    102591: "Over 0.5 Saves", 102592: "Over 1.5 Saves", 102593: "Over 2.5 Saves",
-    # Player Assists (marketId 102606)
-    102607: "Over 0.5 Assists", 102608: "Over 1.5 Assists",
-    # Player SoT alt IDs
-    102624: "Over 0.5 SoT",  102625: "Over 1.5 SoT",
-    # Player Shots alt IDs
-    102626: "Over 0.5 Shots", 102627: "Over 1.5 Shots", 102628: "Over 2.5 Shots",
-    # Player Fouls Won (marketId 102706)
-    102706: "Over 0.5 Fouls Won", 102707: "Over 1.5 Fouls Won",
-    # Anytime / First / Last goalscorer
-    10730: "Anytime Goalscorer", 10731: "First Goalscorer",
-    10732: "Last Goalscorer",    10733: "Score 2+ Goals",
+    106: "Over 0.5", 107: "Under 0.5",
+    108: "Over 1.5", 109: "Under 1.5",
+    1010: "Over 2.5", 1011: "Under 2.5",
+    1012: "Over 3.5", 1013: "Under 3.5",
+    1014: "Over 4.5", 1015: "Under 4.5",
+    1016: "Over 5.5", 1017: "Under 5.5",
+    # Goalscorer
+    10730: "Anytime", 10731: "First", 10732: "Last", 10733: "2+ Goals",
+    # Player Shots
+    10744: "Over 0.5", 10745: "Over 1.5", 10746: "Over 2.5",
+    10747: "Over 3.5", 10748: "Over 4.5",
+    # Player SoT
+    10754: "Over 0.5", 10755: "Over 1.5", 10756: "Over 2.5",
+    102624: "Over 0.5", 102625: "Over 1.5",
+    # Player Shots alt
+    102626: "Over 0.5", 102627: "Over 1.5", 102628: "Over 2.5",
+    # Player Fouls
+    102701: "Over 0.5", 102702: "Over 1.5", 102703: "Over 2.5",
+    # Player Cards
+    102733: "Over 0.5", 102734: "Over 1.5",
+    # Player Tackles
+    102660: "Over 0.5", 102661: "Over 1.5", 102662: "Over 2.5",
+    # Saves
+    102591: "Over 0.5", 102592: "Over 1.5", 102593: "Over 2.5",
+    # Assists
+    102607: "Over 0.5", 102608: "Over 1.5",
+    # Fouls Won
+    102706: "Over 0.5", 102707: "Over 1.5",
 }
 
-# Keep old name for backwards compat
-PLAYER_LINE_LABELS = {
-    # Shots (marketId 10743)
-    10744: "Over 0.5 Shots", 10745: "Over 1.5 Shots", 10746: "Over 2.5 Shots",
-    10747: "Over 3.5 Shots", 10748: "Over 4.5 Shots",
-    # Shots on Target (marketId 10753)
-    10754: "Over 0.5 SoT",   10755: "Over 1.5 SoT",   10756: "Over 2.5 SoT",
-    # Fouls committed (marketId 102700)
-    102701: "Over 0.5 Fouls", 102702: "Over 1.5 Fouls", 102703: "Over 2.5 Fouls",
-    # Cards (marketId 102732)
-    102733: "Over 0.5 Cards", 102734: "Over 1.5 Cards",
-    # Passes (marketId 102716)
-    102717: "Over 29.5 Passes", 102718: "Over 39.5 Passes", 102719: "Over 49.5 Passes",
-    # Tackles (marketId 102659)
-    102660: "Over 0.5 Tackles", 102661: "Over 1.5 Tackles", 102662: "Over 2.5 Tackles",
-    # Saves (marketId 102590)
-    102591: "Over 0.5 Saves", 102592: "Over 1.5 Saves", 102593: "Over 2.5 Saves",
-    # Assists (marketId 102606)
-    102607: "Over 0.5 Assists", 102608: "Over 1.5 Assists",
-    # Anytime goalscorer related
-    10730: "Anytime Goalscorer", 10731: "First Goalscorer", 10732: "Last Goalscorer",
-    10733: "Score 2+ Goals",
-    # Player shots on target (marketId 102624/102626)
-    102624: "Over 0.5 SoT", 102625: "Over 1.5 SoT",
-    102626: "Over 0.5 Shots", 102627: "Over 1.5 Shots", 102628: "Over 2.5 Shots",
-    # Player fouls won (marketId 102706)
-    102706: "Over 0.5 Fouls Won", 102707: "Over 1.5 Fouls Won",
-    # Goals (various over/under goal markets)
-    106: "Over 0.5 Goals",  107: "Under 0.5 Goals",
-    108: "Over 1.5 Goals",  109: "Under 1.5 Goals",
-    1010: "Over 2.5 Goals", 1011: "Under 2.5 Goals",
-    1012: "Over 3.5 Goals", 1013: "Under 3.5 Goals",
-    1014: "Over 4.5 Goals", 1015: "Under 4.5 Goals",
-    1016: "Over 5.5 Goals", 1017: "Under 5.5 Goals",
-}
-
-# Market ID → friendly name for markets not covered by the /markets endpoint
-MARKET_NAME_OVERRIDES = {
-    10730: "Anytime Goalscorer",
-    10731: "First Goalscorer",
-    10732: "Last Goalscorer",
-    10733: "Score 2+ Goals",
-    10738: "Score Outside Box",
-    10743: "Player Shots",
-    10753: "Player Shots on Target",
-    102590: "Goalkeeper Saves",
-    102606: "Player Assists",
-    102624: "Player Shots on Target",
-    102626: "Player Shots",
-    102659: "Player Tackles",
-    102700: "Player Fouls Committed",
-    102706: "Player Fouls Won",
-    102716: "Player Passes",
-    102732: "Player Cards",
+# Correct score outcome → score label (home-away format)
+# Confirmed block structure: home wins 10336-10343, draws 10344-10351, away wins 10352+
+CORRECT_SCORE_LABELS = {
+    # Home wins
+    10336: "1-0", 10337: "2-0", 10338: "2-1", 10339: "3-0",
+    10340: "3-1", 10341: "3-2", 10342: "4-0", 10343: "4-1",
+    # Draws
+    10344: "0-0", 10345: "1-1", 10346: "2-2", 10347: "3-3",
+    10348: "4-4", 10349: "5-5",
+    # Away wins
+    10352: "0-1", 10353: "0-2", 10354: "1-2", 10355: "0-3",
+    10356: "1-3", 10357: "2-3", 10358: "0-4", 10359: "1-4",
+    10360: "2-4", 10361: "3-4",
+    10362: "4-3", 10363: "4-2",
+    10364: "5-0", 10365: "0-5",
+    10368: "5-1", 10369: "1-5", 10370: "5-2", 10371: "2-5",
+    10372: "Any Other", 10377: "6-0", 10378: "0-6",
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -192,12 +162,10 @@ def all_odds_ranked(bm_price_dict):
     return sorted(bm_price_dict.items(), key=lambda x: x[1], reverse=True)
 
 def market_avg(bm_price_dict):
-    """Average odds across all bookmakers — used for comparison."""
     prices = [p for p in bm_price_dict.values() if p and p > 1]
     return sum(prices) / len(prices) if prices else None
 
 def pct_above_avg(price, avg):
-    """How much above the market average is this price, as a percentage."""
     if not avg or avg <= 0:
         return 0
     return ((price - avg) / avg) * 100
@@ -227,13 +195,6 @@ def fetch_tournaments(sport_id):
     data = _get("tournaments", {"sportId": sport_id})
     return data if isinstance(data, list) else []
 
-def fetch_market_names(sport_id):
-    data = _get("markets", {"sportId": sport_id})
-    if isinstance(data, list):
-        return {m.get("marketId"): m.get("marketName")
-                for m in data if m.get("marketId")}
-    return {}
-
 def fetch_fixtures(tournament_id):
     data = _get("fixtures", {
         "tournamentId": tournament_id,
@@ -254,12 +215,10 @@ def fetch_fixtures(tournament_id):
             "start":     fmt_time(f.get("startTime", 0)),
             "start_ts":  f.get("startTime", 0),
             "comp":      f.get("tournament", {}).get("tournamentName", ""),
-            "venue":     f.get("venue", {}).get("venueName", ""),
         })
     return fixtures
 
 def fetch_fixture_odds(fixture_id):
-    """Fetch all odds concurrently across all bookmaker chunks."""
     all_odds = {}
     chunks = [ALL_BOOKMAKERS[i:i+5] for i in range(0, len(ALL_BOOKMAKERS), 5)]
 
@@ -278,16 +237,14 @@ def fetch_fixture_odds(fixture_id):
                 if bm not in all_odds:
                     all_odds[bm] = {}
                 all_odds[bm].update(bm_odds)
-
     return all_odds
 
 def fetch_player_names(player_ids):
     if not player_ids:
         return {}
     names = {}
-    pid_list = list(player_ids)
-    for i in range(0, len(pid_list), 50):
-        batch = pid_list[i:i+50]
+    for i in range(0, len(player_ids), 50):
+        batch = list(player_ids)[i:i+50]
         data = _get("players", {"playerIds": ",".join(str(p) for p in batch)})
         if data and isinstance(data, list):
             for p in data:
@@ -305,43 +262,36 @@ def _fmt_name(raw):
 
 # ── Scanner ────────────────────────────────────────────────────────────────────
 
-# Player prop market IDs — these are shown in full regardless of edge
-PLAYER_MARKET_IDS = {
-    10730, 10731, 10732, 10733, 10738,
-    10743, 10753,
-    102590, 102606, 102624, 102626,
-    102659, 102700, 102706, 102716, 102732,
-}
-
-def scan_all_markets(all_odds, market_names):
-    """Group every odd by (marketId, outcomeId, playerId, handicap).
-    
-    Match markets: only return where best price is >= MIN_EDGE_PCT above average.
-    Player markets: return ALL entries regardless of edge (show every player/line).
+def scan_all_markets(all_odds):
+    """Scan all odds, only process markets defined in MARKET_CONFIG.
+    Returns list of result dicts, one per unique (marketId, outcomeId, playerId, handicap).
     """
-    MIN_EDGE_PCT = 1.0   # minimum % above average for match markets
-    MIN_BOOKS_MATCH  = 4  # match markets need 4+ books for reliable avg
-    MIN_BOOKS_PLAYER = 2  # player props need 2+ books
+    MIN_EDGE_PCT     = 1.0
+    MIN_BOOKS_MATCH  = 4
+    MIN_BOOKS_PLAYER = 2
+    MAX_PRICE_RATIO  = 3.0  # skip if best > avg * this (data error / illiquid)
 
     raw = {}
     for bm, bm_odds in all_odds.items():
         for odd_id, odd in bm_odds.items():
             if not odd.get("active", True):
                 continue
+            mid = odd.get("marketId")
+            # Only process markets we have config for
+            if mid not in MARKET_CONFIG:
+                continue
             price = odd.get("price")
             if not price or price <= 1:
                 continue
-            mid = odd.get("marketId")
             oid = odd.get("outcomeId")
             pid = odd.get("playerId", 0)
             hcp = odd.get("handicap")
             key = (mid, oid, pid, hcp)
             if key not in raw:
+                mkt_name, _, _ = MARKET_CONFIG[mid]
                 raw[key] = {
                     "marketId":   mid,
-                    "marketName": (MARKET_NAME_OVERRIDES.get(mid)
-                               or market_names.get(mid)
-                               or f"Market {mid}"),
+                    "marketName": mkt_name,
                     "outcomeId":  oid,
                     "playerId":   pid,
                     "handicap":   hcp,
@@ -352,9 +302,11 @@ def scan_all_markets(all_odds, market_names):
 
     results = []
     for key, g in raw.items():
+        mid = g["marketId"]
+        mkt_name, is_player, exclude = MARKET_CONFIG[mid]
         bm_prices = g["bookmakers"]
-        is_player_mkt = g.get("playerId", 0) != 0 or mid in PLAYER_MARKET_IDS
-        min_books = MIN_BOOKS_PLAYER if is_player_mkt else MIN_BOOKS_MATCH
+
+        min_books = MIN_BOOKS_PLAYER if is_player else MIN_BOOKS_MATCH
         if len(bm_prices) < min_books:
             continue
 
@@ -363,52 +315,46 @@ def scan_all_markets(all_odds, market_names):
         if not avg or not best_price:
             continue
 
+        # Skip wildly illiquid / data-error prices
+        if best_price > avg * MAX_PRICE_RATIO:
+            continue
+
         pct = pct_above_avg(best_price, avg)
-        is_player = g["marketId"] in PLAYER_MARKET_IDS or g["playerId"] != 0
 
-        # Exclude correct score from match market comparison —
-        # prices vary too wildly across books to give meaningful averages
-        EXCLUDE_FROM_COMPARISON = {10336}
-        if g["marketId"] in EXCLUDE_FROM_COMPARISON:
-            continue
-
-        # Match markets: only show if above average by MIN_EDGE_PCT
-        # Player markets: show everything (even pct=0) so all lines visible
-        if not is_player and pct < MIN_EDGE_PCT:
-            continue
-
-        # Sanity check: if best price is more than 3x the average,
-        # this is likely a data error or wildly illiquid market — skip it
-        if best_price > avg * 3:
+        # Match markets: must beat average by MIN_EDGE_PCT
+        # Player markets & excluded markets: show all
+        if not is_player and not exclude and pct < MIN_EDGE_PCT:
             continue
 
         # Build outcome label
         oid = g["outcomeId"]
         pid = g["playerId"]
         hcp = g["handicap"]
-        mkt = g["marketName"]
 
-        # Use known outcome labels where available
-        if g["marketId"] == 10336:
-            # Correct score — don't guess labels, show TBC until confirmed from OddsPapi
-            outcome_label = f"Score (ID {oid})"
+        if mid == 10336:
+            # Correct score — use confirmed mapping, show as Home-Away format
+            score = CORRECT_SCORE_LABELS.get(oid)
+            outcome_label = score if score else f"Score {oid}"
         else:
-            outcome_label = OUTCOME_LABELS.get(oid) or PLAYER_LINE_LABELS.get(oid) or mkt
-        if hcp is not None and str(hcp) not in outcome_label:
-            outcome_label += f" {hcp}"
+            base = OUTCOME_LABELS.get(oid, mkt_name)
+            outcome_label = base
+            if hcp is not None and str(hcp) not in outcome_label:
+                outcome_label += f" {hcp}"
 
         results.append({
-            "marketId":     g["marketId"],
-            "marketName":   mkt,
-            "outcomeId":    oid,
-            "playerId":     pid,
-            "handicap":     hcp,
+            "marketId":      mid,
+            "marketName":    mkt_name,
+            "outcomeId":     oid,
+            "playerId":      pid,
+            "handicap":      hcp,
             "outcome_label": outcome_label,
-            "bookmakers":   bm_prices,
-            "avg_odds":     round(avg, 3),
-            "best_price":   best_price,
-            "best_bm":      best_bm,
-            "pct_above":    pct,
+            "bookmakers":    bm_prices,
+            "avg_odds":      round(avg, 3),
+            "best_price":    best_price,
+            "best_bm":       best_bm,
+            "pct_above":     pct,
+            "is_player":     is_player,
+            "exclude":       exclude,
         })
 
     return sorted(results, key=lambda x: x["pct_above"], reverse=True)
