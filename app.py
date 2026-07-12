@@ -222,6 +222,24 @@ def build_opportunities(scan_fixtures):
             if g.get("playerId"):
                 pname = names.get(g["playerId"], f"Player {g['playerId']}")
                 outcome = f"{pname} — {outcome}"
+            # Substitute real team names into generic labels
+            outcome = (outcome
+                       .replace("Home (DNB)", f"{fx['home']} (DNB)")
+                       .replace("Away (DNB)", f"{fx['away']} (DNB)")
+                       .replace("Home or Draw", f"{fx['home']} or Draw")
+                       .replace("Draw or Away", f"Draw or {fx['away']}")
+                       .replace("Home or Away", f"{fx['home']} or {fx['away']}")
+                       .replace("HT Home", f"HT {fx['home']}")
+                       .replace("HT Away", f"HT {fx['away']}")
+                       .replace("Home / Home", f"{fx['home']} / {fx['home']}")
+                       .replace("Home / Draw", f"{fx['home']} / Draw")
+                       .replace("Home / Away", f"{fx['home']} / {fx['away']}")
+                       .replace("Draw / Home", f"Draw / {fx['home']}")
+                       .replace("Draw / Away", f"Draw / {fx['away']}")
+                       .replace("Away / Home", f"{fx['away']} / {fx['home']}")
+                       .replace("Away / Draw", f"{fx['away']} / Draw")
+                       .replace("Away / Away", f"{fx['away']} / {fx['away']}")
+                       )
 
             opps.append({
                 "fixtureId":  fx["fixtureId"],

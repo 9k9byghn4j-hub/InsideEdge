@@ -1,19 +1,35 @@
 import requests
+from collections import defaultdict
 
 API_KEY = "REDACTED_API_KEY"
 BASE = "https://v5.oddspapi.io/en"
 
-chunk = "casumo,coral,grosvenor,ladbrokes,lottoland"
-
 r = requests.get(f"{BASE}/fixtures/odds",
     params={"apiKey": API_KEY,
             "fixtureId": "id1000001653452533",
-            "bookmakers": chunk,
+            "bookmakers": "bet365,coral",
             "mainLine": False})
 
-data = r.json()
-odds = data.get("odds", {})
-print(f"Bookmakers returned: {list(odds.keys())}")
+odds = r.json().get("odds", {})
+
+TARGET = {10336: "Correct Score", 10168: "Double Chance",
+          10214: "Draw No Bet", 101905: "HT/FT",
+          10799: "Half Time Result", 101: "Full Time Result"}
+
+seen = {}
 for bm, bm_odds in odds.items():
-    props = sum(1 for o in bm_odds.values() if o.get("playerId", 0) != 0)
-    print(f"  {bm}: {len(bm_odds)} odds, {props} player props")
+    for odd_id, odd in bm_odds.items():
+        mid = odd.get("marketId")
+        if mid in TARGET:
+            oid = odd.get("outcomeId")
+            if (mid, oid) not in seen:
+                seen[(mid, oid)] = odd.get("price")
+
+by_market = defaultdict(list)
+for (mid, oid), price in seen.items():
+    by_market[mid].append((oid, price))
+
+for mid, outcomes in sorted(by_market.items()):
+    print(f"\n{TARGET[mid]} (marketId={mid}):")
+    for oid, price in sorted(outcomes, key=lambda x: x[1]):
+        print(f"  outcomeId={oid}  price={price:.2f}")

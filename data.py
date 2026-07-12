@@ -39,8 +39,76 @@ SPORTS = {
 
 PINNED_TOURNAMENT_IDS = {16, 17, 132}  # World Cup, EPL, UCL
 
-# ── Outcome line labels ─────────────────────────────────────────────────────────
-# Maps outcomeId → human-readable label for over/under player markets
+# ── Outcome labels ────────────────────────────────────────────────────────────
+# Maps outcomeId → human-readable label
+# Correct score: IDs follow blocks — home wins 10336-10343, draws 10344-10346,
+# away wins 10345+ (overlapping blocks by score group)
+OUTCOME_LABELS = {
+    # Full Time Result
+    101: "Home", 102: "Draw", 103: "Away",
+
+    # Both Teams to Score
+    104: "Yes", 105: "No",
+
+    # Draw No Bet — labels substituted with team names at runtime
+    10214: "Home (DNB)", 10215: "Away (DNB)",
+
+    # Double Chance
+    10168: "Home or Draw", 10169: "Draw or Away", 10170: "Home or Away",
+
+    # Half Time Result
+    10799: "HT Home", 10800: "HT Draw", 10801: "HT Away",
+
+    # HT/FT
+    101905: "Home / Home", 101906: "Home / Draw", 101907: "Home / Away",
+    101908: "Draw / Home", 101909: "Draw / Draw", 101910: "Draw / Away",
+    101911: "Away / Home", 101912: "Away / Draw", 101913: "Away / Away",
+
+    # Correct Score — mapped from observed price patterns (France v Spain)
+    # Home wins
+    10336: "1-0",  10337: "0-0",  10338: "2-0",  10339: "2-1",
+    10340: "3-0",  10341: "3-1",  10342: "3-2",  10343: "4-0",
+    # Away wins
+    10345: "0-1",  10346: "1-1",  10347: "0-2",  10348: "1-2",
+    10349: "0-3",  10350: "0-4",  10354: "2-2",  10355: "1-3",
+    10356: "2-3",  10357: "1-4",  10358: "2-4",
+    10363: "3-3",  10364: "3-4",  10365: "4-4",  10372: "Other",
+
+    # Over/Under Goals
+    106: "Over 0.5 Goals",  107: "Under 0.5 Goals",
+    108: "Over 1.5 Goals",  109: "Under 1.5 Goals",
+    1010: "Over 2.5 Goals", 1011: "Under 2.5 Goals",
+    1012: "Over 3.5 Goals", 1013: "Under 3.5 Goals",
+    1014: "Over 4.5 Goals", 1015: "Under 4.5 Goals",
+    1016: "Over 5.5 Goals", 1017: "Under 5.5 Goals",
+
+    # Player Shots (marketId 10743)
+    10744: "Over 0.5 Shots", 10745: "Over 1.5 Shots", 10746: "Over 2.5 Shots",
+    10747: "Over 3.5 Shots", 10748: "Over 4.5 Shots",
+    # Player Shots on Target (marketId 10753)
+    10754: "Over 0.5 SoT",   10755: "Over 1.5 SoT",   10756: "Over 2.5 SoT",
+    # Player Fouls Committed (marketId 102700)
+    102701: "Over 0.5 Fouls", 102702: "Over 1.5 Fouls", 102703: "Over 2.5 Fouls",
+    # Player Cards (marketId 102732)
+    102733: "Over 0.5 Cards", 102734: "Over 1.5 Cards",
+    # Player Tackles (marketId 102659)
+    102660: "Over 0.5 Tackles", 102661: "Over 1.5 Tackles", 102662: "Over 2.5 Tackles",
+    # Goalkeeper Saves (marketId 102590)
+    102591: "Over 0.5 Saves", 102592: "Over 1.5 Saves", 102593: "Over 2.5 Saves",
+    # Player Assists (marketId 102606)
+    102607: "Over 0.5 Assists", 102608: "Over 1.5 Assists",
+    # Player SoT alt IDs
+    102624: "Over 0.5 SoT",  102625: "Over 1.5 SoT",
+    # Player Shots alt IDs
+    102626: "Over 0.5 Shots", 102627: "Over 1.5 Shots", 102628: "Over 2.5 Shots",
+    # Player Fouls Won (marketId 102706)
+    102706: "Over 0.5 Fouls Won", 102707: "Over 1.5 Fouls Won",
+    # Anytime / First / Last goalscorer
+    10730: "Anytime Goalscorer", 10731: "First Goalscorer",
+    10732: "Last Goalscorer",    10733: "Score 2+ Goals",
+}
+
+# Keep old name for backwards compat
 PLAYER_LINE_LABELS = {
     # Shots (marketId 10743)
     10744: "Over 0.5 Shots", 10745: "Over 1.5 Shots", 10746: "Over 2.5 Shots",
@@ -298,8 +366,8 @@ def scan_all_markets(all_odds, market_names):
         hcp = g["handicap"]
         mkt = g["marketName"]
 
-        # Use known line labels where available
-        outcome_label = PLAYER_LINE_LABELS.get(oid, mkt)
+        # Use known outcome labels where available
+        outcome_label = OUTCOME_LABELS.get(oid) or PLAYER_LINE_LABELS.get(oid) or mkt
         if hcp is not None and str(hcp) not in outcome_label:
             outcome_label += f" {hcp}"
 
