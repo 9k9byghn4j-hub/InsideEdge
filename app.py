@@ -261,7 +261,7 @@ def build_opportunities(scan_fixtures):
                 "avg_odds":   g["avg_odds"],
                 "pct_above":  g["pct_above"],
                 "bookmakers": g["bookmakers"],
-                "is_player":  g.get("playerId", 0) != 0 or g["marketId"] in D.PLAYER_MARKET_IDS,
+                "is_player":  g.get("is_player", False),
             })
 
     return sorted(opps, key=lambda x: x["pct_above"], reverse=True)
