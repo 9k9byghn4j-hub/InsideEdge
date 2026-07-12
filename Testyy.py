@@ -1,6 +1,7 @@
+import os
 import requests
 
-API_KEY = "REDACTED_API_KEY"
+API_KEY = os.environ["ODDSPAPI_KEY"]
 BASE = "https://v5.oddspapi.io/en"
 
 # Get current WC fixture
