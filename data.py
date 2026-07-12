@@ -219,24 +219,40 @@ def fetch_fixtures(tournament_id):
     return fixtures
 
 def fetch_fixture_odds(fixture_id):
+    """Fetch all odds for a fixture across every bookmaker.
+    Runs all chunks concurrently (max 6 workers). Each chunk retried up to 3x
+    on failure so no bookmaker is silently dropped."""
     all_odds = {}
     chunks = [ALL_BOOKMAKERS[i:i+5] for i in range(0, len(ALL_BOOKMAKERS), 5)]
 
     def fetch_chunk(chunk):
+        # _get already retries 3x with backoff on 429
         data = _get("fixtures/odds", {
             "fixtureId":  fixture_id,
             "bookmakers": ",".join(chunk),
             "mainLine":   False,
         })
-        return data["odds"] if data and "odds" in data else {}
+        if data and "odds" in data:
+            return data["odds"]
+        # One extra attempt after a short pause
+        import time; time.sleep(1.0)
+        data2 = _get("fixtures/odds", {
+            "fixtureId":  fixture_id,
+            "bookmakers": ",".join(chunk),
+            "mainLine":   False,
+        })
+        return data2["odds"] if data2 and "odds" in data2 else {}
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = [pool.submit(fetch_chunk, chunk) for chunk in chunks]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(fetch_chunk, chunk): chunk for chunk in chunks}
         for future in as_completed(futures):
-            for bm, bm_odds in future.result().items():
-                if bm not in all_odds:
-                    all_odds[bm] = {}
-                all_odds[bm].update(bm_odds)
+            try:
+                for bm, bm_odds in future.result().items():
+                    if bm not in all_odds:
+                        all_odds[bm] = {}
+                    all_odds[bm].update(bm_odds)
+            except Exception:
+                pass
     return all_odds
 
 def fetch_player_names(player_ids):

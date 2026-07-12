@@ -123,7 +123,7 @@ def get_tournaments(sport_id):
 def get_fixtures(tid):
     return D.fetch_fixtures(tid)
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=120)
 def get_odds(fid):
     return D.fetch_fixture_odds(fid)
 
