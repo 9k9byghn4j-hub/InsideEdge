@@ -47,17 +47,53 @@ PLAYER_LINE_LABELS = {
     10747: "Over 3.5 Shots", 10748: "Over 4.5 Shots",
     # Shots on Target (marketId 10753)
     10754: "Over 0.5 SoT",   10755: "Over 1.5 SoT",   10756: "Over 2.5 SoT",
-    # Fouls (marketId 102700)
+    # Fouls committed (marketId 102700)
     102701: "Over 0.5 Fouls", 102702: "Over 1.5 Fouls", 102703: "Over 2.5 Fouls",
     # Cards (marketId 102732)
     102733: "Over 0.5 Cards", 102734: "Over 1.5 Cards",
-    # Goals (various over/under goal markets share outcome patterns)
-    106: "Over 0.5 Goals", 107: "Under 0.5 Goals",
-    108: "Over 1.5 Goals", 109: "Under 1.5 Goals",
+    # Passes (marketId 102716)
+    102717: "Over 29.5 Passes", 102718: "Over 39.5 Passes", 102719: "Over 49.5 Passes",
+    # Tackles (marketId 102659)
+    102660: "Over 0.5 Tackles", 102661: "Over 1.5 Tackles", 102662: "Over 2.5 Tackles",
+    # Saves (marketId 102590)
+    102591: "Over 0.5 Saves", 102592: "Over 1.5 Saves", 102593: "Over 2.5 Saves",
+    # Assists (marketId 102606)
+    102607: "Over 0.5 Assists", 102608: "Over 1.5 Assists",
+    # Anytime goalscorer related
+    10730: "Anytime Goalscorer", 10731: "First Goalscorer", 10732: "Last Goalscorer",
+    10733: "Score 2+ Goals",
+    # Player shots on target (marketId 102624/102626)
+    102624: "Over 0.5 SoT", 102625: "Over 1.5 SoT",
+    102626: "Over 0.5 Shots", 102627: "Over 1.5 Shots", 102628: "Over 2.5 Shots",
+    # Player fouls won (marketId 102706)
+    102706: "Over 0.5 Fouls Won", 102707: "Over 1.5 Fouls Won",
+    # Goals (various over/under goal markets)
+    106: "Over 0.5 Goals",  107: "Under 0.5 Goals",
+    108: "Over 1.5 Goals",  109: "Under 1.5 Goals",
     1010: "Over 2.5 Goals", 1011: "Under 2.5 Goals",
     1012: "Over 3.5 Goals", 1013: "Under 3.5 Goals",
     1014: "Over 4.5 Goals", 1015: "Under 4.5 Goals",
     1016: "Over 5.5 Goals", 1017: "Under 5.5 Goals",
+}
+
+# Market ID → friendly name for markets not covered by the /markets endpoint
+MARKET_NAME_OVERRIDES = {
+    10730: "Anytime Goalscorer",
+    10731: "First Goalscorer",
+    10732: "Last Goalscorer",
+    10733: "Score 2+ Goals",
+    10738: "Score Outside Box",
+    10743: "Player Shots",
+    10753: "Player Shots on Target",
+    102590: "Goalkeeper Saves",
+    102606: "Player Assists",
+    102624: "Player Shots on Target",
+    102626: "Player Shots",
+    102659: "Player Tackles",
+    102700: "Player Fouls Committed",
+    102706: "Player Fouls Won",
+    102716: "Player Passes",
+    102732: "Player Cards",
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -203,8 +239,8 @@ def scan_all_markets(all_odds, market_names):
       - pct_above:  how much best price beats the average (%)
     Only returns groups where best price is above average by MIN_EDGE%.
     """
-    MIN_EDGE_PCT = 1.5   # minimum % above average to show
-    MIN_BOOKS    = 3     # need at least this many books to compare meaningfully
+    MIN_EDGE_PCT = 1.0   # minimum % above average to show
+    MIN_BOOKS    = 2     # need at least 2 books to compare meaningfully
 
     raw = {}
     for bm, bm_odds in all_odds.items():
@@ -222,7 +258,9 @@ def scan_all_markets(all_odds, market_names):
             if key not in raw:
                 raw[key] = {
                     "marketId":   mid,
-                    "marketName": market_names.get(mid, f"Market {mid}"),
+                    "marketName": (MARKET_NAME_OVERRIDES.get(mid)
+                               or market_names.get(mid)
+                               or f"Market {mid}"),
                     "outcomeId":  oid,
                     "playerId":   pid,
                     "handicap":   hcp,
