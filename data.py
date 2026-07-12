@@ -56,7 +56,7 @@ MARKET_CONFIG = {
     10214:  ("Draw No Bet",           False, False),
     10799:  ("Half Time Result",      False, False),
     101905: ("Half Time / Full Time", False, False),
-    10336:  ("Correct Score",         False, True),   # excluded from comparison — prices too varied
+    # 10336 Correct Score — EXCLUDED until OddsPapi confirms outcomeId→score mapping
     10730:  ("Anytime Goalscorer",    True,  False),
     10731:  ("First Goalscorer",      True,  False),
     10732:  ("Last Goalscorer",       True,  False),
