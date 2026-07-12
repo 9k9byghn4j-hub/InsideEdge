@@ -1,7 +1,9 @@
+import pandas as pd
 import streamlit as st
 import data as D
 import watchlist as W
 import theme
+import charts
 
 theme.setup_page()
 STICKMAN_HTML = theme.STICKMAN_HTML
@@ -313,12 +315,15 @@ with st.expander("🔍 Bookmaker coverage", expanded=False):
             coverage[bm]["props"] += props
     missing = [b for b in D.ALL_BOOKMAKERS
                if b not in coverage and b not in D.EXCLUDED_FROM_BM]
-    for bm in sorted(coverage, key=lambda b: -coverage[b]["odds"]):
-        c = coverage[bm]
-        st.markdown(
-            f'<span style="font-family:JetBrains Mono,monospace;font-size:.72rem;color:#9a9ab0">'
-            f'{D.bm_label(bm)}: {c["odds"]} odds · {c["props"]} player props</span>',
-            unsafe_allow_html=True)
+    bm_order = sorted(coverage, key=lambda b: -coverage[b]["odds"])
+    cov_df = pd.DataFrame(
+        {"Match Odds": [coverage[b]["odds"] for b in bm_order],
+         "Player Props": [coverage[b]["props"] for b in bm_order]},
+        index=[D.bm_label(b) for b in bm_order],
+    )
+    cov_fig = charts.coverage_heatmap(cov_df)
+    if cov_fig is not None:
+        st.plotly_chart(cov_fig, use_container_width=True)
     if missing:
         st.markdown(
             f'<span style="font-family:JetBrains Mono,monospace;font-size:.72rem;color:#ff4d6d">'
@@ -334,6 +339,13 @@ if not match_opps_f:
     st.markdown('<div class="no-data">No match market edges found.</div>',
                 unsafe_allow_html=True)
 else:
+    top_edges = match_opps_f[:10]
+    edge_labels = [f"{o['outcome']} ({D.bm_label(o['best_bm'])})" for o in top_edges]
+    edge_values = [o["pct_above"] for o in top_edges]
+    edge_fig = charts.edge_bar_chart(edge_labels, edge_values, title="Top Edges vs Market Avg")
+    if edge_fig is not None:
+        st.plotly_chart(edge_fig, use_container_width=True)
+
     for idx, opp in enumerate(match_opps_f[:10]):
         _render_card(opp, f"m_{idx}")
 

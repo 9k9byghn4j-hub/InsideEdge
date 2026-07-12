@@ -3,6 +3,7 @@ import pandas as pd
 import data as D
 import watchlist as W
 import theme
+import charts
 
 theme.setup_page("InsideEdge — Terminal")
 theme.render_topbar("TERMINAL")
@@ -22,11 +23,8 @@ def get_player_names(pids_tuple):
     return D.fetch_player_names(list(pids_tuple))
 
 
-def _price_matrix(groups, row_label_fn):
-    """Build a styled price grid: rows=outcome, columns=bookmaker.
-    Streamlit's dataframe grid renders from the Styler's raw (unformatted)
-    values, so NaN cells show as literal "None" if left to Styler.format —
-    text and highlighting are computed separately here instead."""
+def _numeric_matrix(groups, row_label_fn):
+    """rows=outcome, columns=bookmaker, values=raw price (NaN if missing)."""
     all_bms = sorted({bm for g in groups for bm in g["bookmakers"]}, key=D.bm_label)
     if not all_bms:
         return None
@@ -34,7 +32,14 @@ def _price_matrix(groups, row_label_fn):
     for g in groups:
         rows[row_label_fn(g)] = {D.bm_label(bm): price for bm, price in g["bookmakers"].items()}
     columns = [D.bm_label(bm) for bm in all_bms]
-    numeric = pd.DataFrame.from_dict(rows, orient="index").reindex(columns=columns)
+    return pd.DataFrame.from_dict(rows, orient="index").reindex(columns=columns)
+
+
+def _price_matrix(numeric):
+    """Build a styled price grid from a numeric matrix (see _numeric_matrix).
+    Streamlit's dataframe grid renders from the Styler's raw (unformatted)
+    values, so NaN cells show as literal "None" if left to Styler.format —
+    text and highlighting are computed separately here instead."""
     display = numeric.map(lambda v: f"{v:.2f}" if pd.notna(v) else "—")
     row_max = numeric.max(axis=1)
 
@@ -45,6 +50,14 @@ def _price_matrix(groups, row_label_fn):
         return styles
 
     return display.style.apply(_highlight, axis=None)
+
+
+def _render_prices(numeric, key):
+    fig = charts.price_heatmap(numeric)
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True, key=f"heatmap_{key}")
+    if st.toggle("Show as table", key=f"table_toggle_{key}"):
+        st.dataframe(_price_matrix(numeric), use_container_width=True)
 
 
 top = st.columns([5, 1])
@@ -92,9 +105,9 @@ for fid, meta in sorted(pins.items(), key=lambda kv: kv[1].get("start", "")):
     player_groups = [g for g in groups if g.get("is_player")]
 
     if match_groups:
-        styled = _price_matrix(match_groups, lambda g: f'{g["marketName"]}: {g["outcome_label"]}')
-        if styled is not None:
-            st.dataframe(styled, use_container_width=True)
+        numeric = _numeric_matrix(match_groups, lambda g: f'{g["marketName"]}: {g["outcome_label"]}')
+        if numeric is not None:
+            _render_prices(numeric, key=f"match_{fid}")
     else:
         st.markdown('<div class="no-data">No match-market prices yet.</div>', unsafe_allow_html=True)
 
@@ -107,9 +120,9 @@ for fid, meta in sorted(pins.items(), key=lambda kv: kv[1].get("start", "")):
             return f'{pname} — {g["marketName"]}: {g["outcome_label"]}'
 
         with st.expander(f"Player props ({len(player_groups)})", expanded=False):
-            pstyled = _price_matrix(player_groups, _player_label)
-            if pstyled is not None:
-                st.dataframe(pstyled, use_container_width=True)
+            pnumeric = _numeric_matrix(player_groups, _player_label)
+            if pnumeric is not None:
+                _render_prices(pnumeric, key=f"props_{fid}")
 
     st.write("")
 

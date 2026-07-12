@@ -2,6 +2,7 @@ import streamlit as st
 import data as D
 import arbitrage as A
 import theme
+import charts
 
 theme.setup_page("InsideEdge — Arbitrage")
 theme.render_topbar("ARBITRAGE")
@@ -85,6 +86,18 @@ for fx in fixtures:
 
 all_opps.sort(key=lambda o: o["margin_pct"], reverse=True)
 scan_ph.empty()
+
+if all_opps:
+    labels = []
+    for opp in all_opps:
+        fx = opp["fixture"]
+        mkt_name, _, _ = D.MARKET_CONFIG.get(opp["marketId"], ("Unknown", False, False))
+        labels.append(f"{fx['home']} v {fx['away']} — {mkt_name}")
+    fig = charts.edge_bar_chart(
+        labels, [o["margin_pct"] for o in all_opps],
+        title="Arbitrage Margin by Opportunity", color=charts.AMBER, suffix="%")
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
 
 m1, m2 = st.columns(2)
 with m1:
