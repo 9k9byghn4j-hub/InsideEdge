@@ -194,8 +194,23 @@ def substitute_team_names(label, home, away):
 
 # ── API ────────────────────────────────────────────────────────────────────────
 
+_LAST_ERRORS = []
+
+def _log_error(endpoint, detail):
+    if API_KEY:
+        detail = detail.replace(API_KEY, "***")
+    _LAST_ERRORS.append(f"{endpoint}: {detail}")
+    del _LAST_ERRORS[:-20]
+
+def get_last_errors():
+    return list(_LAST_ERRORS)
+
+def clear_errors():
+    _LAST_ERRORS.clear()
+
 def _get(endpoint, params, retries=3):
     import time
+    detail = None
     for attempt in range(retries):
         try:
             r = requests.get(
@@ -206,11 +221,17 @@ def _get(endpoint, params, retries=3):
             if r.status_code == 200:
                 return r.json()
             if r.status_code == 429:
+                detail = "429 rate limited (all retries exhausted)"
                 time.sleep(0.8 * (attempt + 1))
                 continue
+            detail = f"HTTP {r.status_code}: {r.text[:200]}"
+            _log_error(endpoint, detail)
             return None
-        except Exception:
+        except Exception as e:
+            detail = f"{type(e).__name__}: {e}"
             time.sleep(0.4 * (attempt + 1))
+    if detail:
+        _log_error(endpoint, detail)
     return None
 
 def fetch_tournaments(sport_id):

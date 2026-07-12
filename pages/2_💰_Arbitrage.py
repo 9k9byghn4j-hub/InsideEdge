@@ -64,6 +64,11 @@ loading.empty()
 
 if not fixtures:
     st.markdown('<div class="no-data">No upcoming fixtures found.</div>', unsafe_allow_html=True)
+    errors = D.get_last_errors()
+    if errors:
+        with st.expander("⚠️ API diagnostics", expanded=True):
+            for e in errors[-5:]:
+                st.code(e)
     st.stop()
 
 scan_ph = st.empty()
